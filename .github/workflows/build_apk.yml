@@ -24,11 +24,9 @@ jobs:
           channel: 'stable'
           cache: true.                                                                                    
     
-      - name: Generate Android Platform
+      - name: Get Dependencies
         run: |
-         if [ ! -d "android" ]; then
-         flutter create . --platforms=android --org com.officesetu.app
-         fi
+           flutter pub get
 
       - name: Fix minSdkVersion to 21
         run: |
