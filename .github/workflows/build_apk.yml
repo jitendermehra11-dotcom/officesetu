@@ -22,13 +22,14 @@ jobs:
         with:
           flutter-version: '3.19.x'
           channel: 'stable'
-          cache: true
-
-      - name: Install Dependencies & Generate Android
+          cache: true.                                                                                    
+    
+      - name: Generate Android Platform
         run: |
-          flutter create . --platforms=android
-          flutter pub get
-          
+         if [ ! -d "android" ]; then
+         flutter create . --platforms=android --org com.officesetu.app
+         fi
+
       - name: Fix minSdkVersion to 21
         run: |
           python3 -c "
