@@ -24,10 +24,11 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Dependencies
+      - name: Install Dependencies & Generate Android
         run: |
+          flutter create . --platforms=android
           flutter pub get
-
+          
       - name: Fix minSdkVersion to 21
         run: |
           python3 -c "
@@ -38,7 +39,6 @@ jobs:
           with open(path, 'w') as f:
               f.write(content)
           "
-
       - name: Build APK
         run: flutter build apk --release
 
@@ -47,3 +47,4 @@ jobs:
         with:
           name: officesetu-Release-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+          
