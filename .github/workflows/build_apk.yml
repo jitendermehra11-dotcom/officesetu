@@ -22,11 +22,12 @@ jobs:
         with:
           flutter-version: '3.19.x'
           channel: 'stable'
-          cache: true.                                                                                    
-    
-      - name: Get Dependencies
+          cache: true
+
+      - name: Generate Android Platform & Get Dependencies
         run: |
-           flutter pub get
+          flutter create . --platforms=android --org com.officesetu.app
+          flutter pub get
 
       - name: Fix minSdkVersion to 21
         run: |
@@ -38,6 +39,7 @@ jobs:
           with open(path, 'w') as f:
               f.write(content)
           "
+
       - name: Build APK
         run: flutter build apk --release
 
@@ -46,4 +48,3 @@ jobs:
         with:
           name: officesetu-Release-APK
           path: build/app/outputs/flutter-apk/app-release.apk
-          
