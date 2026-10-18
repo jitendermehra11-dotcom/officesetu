@@ -1,4 +1,4 @@
-name: Build officesetu APK
+name: Build Officesetu APK
 
 on:
   push:
@@ -24,9 +24,8 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Create Android Platform & Install Dependencies
+      - name: Install Dependencies
         run: |
-          flutter create . --platforms=android
           flutter pub get
 
       - name: Fix minSdkVersion to 21
@@ -35,7 +34,7 @@ jobs:
           path = 'android/app/build.gradle'
           with open(path, 'r') as f:
               content = f.read()
-          content = content.replace('minSdkVersion 16', 'minSdkVersion 21').replace('minSdkVersion 19', 'minSdkVersion 21').replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
+          content = content.replace('minSdkVersion 16', 'minSdkVersion 21').replace('minSdkVersion 19', 'minSdkVersion 21')
           with open(path, 'w') as f:
               f.write(content)
           "
@@ -48,6 +47,3 @@ jobs:
         with:
           name: officesetu-Release-APK
           path: build/app/outputs/flutter-apk/app-release.apk
-
-
-          
