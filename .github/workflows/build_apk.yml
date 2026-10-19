@@ -1,4 +1,4 @@
-name: Build Officesetu APK
+name: Build officesetu APK
 
 on:
   push:
@@ -39,6 +39,8 @@ jobs:
           with open(path, 'w') as f:
               f.write(content)
           "
+      - name: Clean Project
+        run: flutter clean
 
       - name: Build APK
         run: flutter build apk --release
@@ -48,3 +50,5 @@ jobs:
         with:
           name: officesetu-Release-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+
+          
