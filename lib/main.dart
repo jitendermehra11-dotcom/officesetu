@@ -1,5 +1,10 @@
-
-
+// lib/main.dart
+import 'package:flutter/material.dart';
+import 'package:officesetu/screens/room1_attendance.dart';
+import 'package:officesetu/screens/room2_hr.dart';
+import 'package:officesetu/screens/room3_expense.dart';
+import 'package:officesetu/screens/room4_task.dart';
+import 'package:officesetu/screens/room5_invoice.dart';
 
 void main() {
   runApp(const OfficeSetuApp());
