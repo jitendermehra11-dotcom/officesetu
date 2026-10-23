@@ -39,6 +39,7 @@ jobs:
           with open(path, 'w') as f:
               f.write(content)
           "
+      
       - name: Clean Project
         run: flutter clean
 
