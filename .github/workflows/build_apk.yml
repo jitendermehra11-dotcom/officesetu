@@ -29,17 +29,19 @@ jobs:
           flutter create . --platforms=android --org com.officesetu.app
           flutter pub get
 
-      - name: Fix minSdkVersion to 21
-        run: |
-          python3 -c "
-          path = 'android/app/build.gradle'
-          with open(path, 'r') as f:
-              content = f.read()
-          content = content.replace('minSdkVersion 16', 'minSdkVersion 21').replace('minSdkVersion 19', 'minSdkVersion 21')
-          with open(path, 'w') as f:
-              f.write(content)
-          "
-      
+          - name: Fix minSdkVersion to 21
+            run: |
+            python3 -c "
+            path = 'android/app/build.gradle'
+            with open(path, 'r') as f:
+            content = f.read()
+            content = content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
+            content = content.replace('minSdkVersion 19', 'minSdkVersion 21')
+            content = content.replace('minSdkVersion 16', 'minSdkVersion 21')
+            with open(path, 'w') as f:
+            f.write(content)
+           "
+        
       - name: Clean Project
         run: flutter clean
 
