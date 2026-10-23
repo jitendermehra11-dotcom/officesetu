@@ -26,8 +26,9 @@ jobs:
                         
       - name: Generate Android Platform & Get Dependencies
         run: |
-          flutter create . --platforms=android --org com.officesetu.app
-          flutter pub get
+         flutter create . --platforms=android --org com.officesetu.app
+         flutter pub get
+
 
           - name: Fix minSdkVersion to 21
             run: |
