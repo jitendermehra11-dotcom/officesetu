@@ -25,13 +25,10 @@ jobs:
           cache: false 
                         
       - name: Generate Android Platform & Get Dependencies
+        run: flutter create . --platforms=android --org com.officesetu.app && flutter pub get
+
+      - name: Fix minSdkVersion to 21
         run: |
-         flutter create . --platforms=android --org com.officesetu.app
-         flutter pub get
-
-
-          - name: Fix minSdkVersion to 21
-            run: |
             python3 -c "
             path = 'android/app/build.gradle'
             with open(path, 'r') as f:
@@ -41,8 +38,7 @@ jobs:
             content = content.replace('minSdkVersion 16', 'minSdkVersion 21')
             with open(path, 'w') as f:
             f.write(content)
-           "
-        
+            "
       - name: Clean Project
         run: flutter clean
 
@@ -51,8 +47,8 @@ jobs:
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
-        with:
-          name: officesetu-Release-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+        with: 
+         -name: officesetu-Release-APK
+         path: build/app/outputs/flutter-apk/app-release.apk
 
           
