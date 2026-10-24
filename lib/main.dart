@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:officesetu/utils/app_strings.dart';
 import 'package:officesetu/screens/room1_attendance.dart';
 import 'package:officesetu/screens/room2_hr.dart';
 import 'package:officesetu/screens/room3_expense.dart';
@@ -42,34 +43,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('OfficeSetu - लाइसेंस और सब्सक्रिप्शन'),
+        title: Text(AppStrings.isEnglish ? 'OfficeSetu - License & Subscription' : 'OfficeSetu - लाइसेंस और सब्सक्रिप्शन'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('वर्तमान योजना: $_currentTier', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+            Text('${AppStrings.isEnglish ? "Current Plan" : "वर्तमान योजना"}: $_currentTier', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
             const SizedBox(height: 10),
-            const Text('1. बेसिक टियर: विज्ञापनों के साथ दैनिक 5 मुफ्त स्कैन।'),
-            const Text('2. स्टैंडर्ड टियर: छोटी टीमों के लिए मासिक प्लान।'),
-            const Text('3. एंटरप्राइज टियर: 400+ कर्मचारियों और फुल सिक्योरिटी वॉल्ट के साथ।'),
+            Text(AppStrings.isEnglish ? '1. Basic Tier: Daily 5 free scans with ads.' : '1. बेसिक टियर: विज्ञापनों के साथ दैनिक 5 मुफ्त स्कैन।'),
+            Text(AppStrings.isEnglish ? '2. Standard Tier: Monthly plan for small teams.' : '2. स्टैंडर्ड टियर: छोटी टीमों के लिए मासिक प्लान।'),
+            Text(AppStrings.isEnglish ? '3. Enterprise Tier: 400+ employees with full security vault.' : '3. एंटरप्राइज टियर: 400+ कर्मचारियों और फुल सिक्योरिटी वॉल्ट के साथ।'),
             const SizedBox(height: 12),
-            const Text('अपने ऑफिस के सुचारू संचालन के लिए फुल वर्जन एक्टिवेट करें।', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(AppStrings.isEnglish ? 'Activate full version for smooth office operations.' : 'अपने ऑफिस के सुचारू संचालन के लिए फुल वर्जन एक्टिवेट करें।', style: const TextStyle(fontSize: 12, color: Colors.grey)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('बंद करें'),
+            child: Text(AppStrings.isEnglish ? 'Close' : 'बंद करें'),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('सुरक्षित पेमेंट गेटवे और प्लान अपग्रेड विंडो जल्द खुलेगी!')),
+                SnackBar(content: Text(AppStrings.isEnglish ? 'Secure payment gateway and upgrade window coming soon!' : 'सुरक्षित पेमेंट गेटवे और प्लान अपग्रेड विंडो जल्द खुलेगी!')),
               );
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo[900], foregroundColor: Colors.white),
-            child: const Text('प्लान अपग्रेड करें'),
+            child: Text(AppStrings.isEnglish ? 'Upgrade Plan' : 'प्लान अपग्रेड करें'),
           ),
         ],
       ),
@@ -82,25 +83,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('OfficeSetu - उपयोगकर्ता निर्देश'),
+          title: Text(AppStrings.isEnglish ? 'OfficeSetu - User Manual' : 'OfficeSetu - उपयोगकर्ता निर्देश'),
           content: SingleChildScrollView(
             child: ListBody(
-              children: const <Widget>[
-                Text('• Room 01 (Attendance): ओसीआर स्कैनर से अटेंडेंस रजिस्टर स्कैन करें और मिलान करें।'),
-                SizedBox(height: 8),
-                Text('• Room 02 (HR Helper): स्टाफ के रिकॉर्ड और सिक्योर Vault प्रबंधित करें।'),
-                SizedBox(height: 8),
-                Text('• Room 03 (Expense): रोजाना के खर्चों और बही-खाते का हिसाब दर्ज करें।'),
-                SizedBox(height: 8),
-                Text('• Room 04 (Task Hub): टीम को टास्क अलॉट करें और प्रोग्रेस ट्रैक करें।'),
-                SizedBox(height: 8),
-                Text('• Room 05 (Invoice): प्रोफेशनल पीडीएफ बिल और बिलिंग तैयार करें।'),
+              children: <Widget>[
+                Text(AppStrings.isEnglish ? '• Room 01 (Attendance): Scan attendance register using OCR and match.' : '• Room 01 (Attendance): ओसीआर स्कैनर से अटेंडेंस रजिस्टर स्कैन करें और मिलान करें।'),
+                const SizedBox(height: 8),
+                Text(AppStrings.isEnglish ? '• Room 02 (HR Helper): Manage staff records and secure Vault.' : '• Room 02 (HR Helper): स्टाफ के रिकॉर्ड और सिक्योर Vault प्रबंधित करें।'),
+                const SizedBox(height: 8),
+                Text(AppStrings.isEnglish ? '• Room 03 (Expense): Record daily expenses and ledgers.' : '• Room 03 (Expense): रोजाना के खर्चों और बही-खाते का हिसाब दर्ज करें।'),
+                const SizedBox(height: 8),
+                Text(AppStrings.isEnglish ? '• Room 04 (Task Hub): Allocate tasks to team and track progress.' : '• Room 04 (Task Hub): टीम को टास्क अलॉट करें और प्रोग्रेस ट्रैक करें।'),
+                const SizedBox(height: 8),
+                Text(AppStrings.isEnglish ? '• Room 05 (Invoice): Create professional PDF bills and billing.' : '• Room 05 (Invoice): प्रोफेशनल पीडीएफ बिल और बिलिंग तैयार करें।'),
               ],
             ),
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text('समझ गया'),
+              child: Text(AppStrings.isEnglish ? 'Got it' : 'समझ गया'),
               onPressed: () => Navigator.of(context).pop(),
             ),
           ],
@@ -113,20 +114,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OfficeSetu - Master Dashboard'),
+        title: Text(AppStrings.appTitle),
         backgroundColor: Colors.indigo[900],
         actions: [
+          // भाषा बदलने वाला बटन (Language Toggle)
+          IconButton(
+            icon: const Icon(Icons.language),
+            tooltip: AppStrings.isEnglish ? 'Switch to Hindi' : 'Switch to English',
+            onPressed: () {
+              setState(() {
+                AppStrings.isEnglish = !AppStrings.isEnglish;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(AppStrings.langToast)),
+              );
+            },
+          ),
           // यूजर मैनुअल / हेल्प बटन
           IconButton(
             icon: const Icon(Icons.help_outline),
             onPressed: () => _showUserManualDialog(context),
-            tooltip: 'उपयोगकर्ता निर्देश (User Manual)',
+            tooltip: AppStrings.isEnglish ? 'User Manual' : 'उपयोगकर्ता निर्देश',
           ),
           // सब्सक्रिप्शन और टियर स्थिति बटन
           IconButton(
             icon: const Icon(Icons.verified_user),
             onPressed: _showSubscriptionDialog,
-            tooltip: 'सब्सक्रिप्शन और टियर स्थिति',
+            tooltip: AppStrings.isEnglish ? 'Subscription Tier' : 'सब्सक्रिप्शन और टियर स्थिति',
           ),
         ],
       ),
@@ -145,18 +159,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('स्वागत है, व्यवस्थापक (Admin)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                  Text(AppStrings.isEnglish ? 'Welcome, Administrator (Admin)' : 'स्वागत है, व्यवस्थापक (Admin)', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.indigo)),
                   const SizedBox(height: 4),
-                  Text('मोड: $_currentTier', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                  Text('${AppStrings.isEnglish ? "Mode" : "मोड"}: $_currentTier', style: const TextStyle(fontSize: 13, color: Colors.black87)),
                   const SizedBox(height: 2),
-                  Text('बेसिक दैनिक स्कैन शेष: $_dailyScansLeft / 5', style: TextStyle(fontSize: 12, color: Colors.teal[800], fontWeight: FontWeight.w600)),
+                  Text('${AppStrings.isEnglish ? "Daily scans left" : "बेसिक दैनिक स्कैन शेष"}: $_dailyScansLeft / 5', style: TextStyle(fontSize: 12, color: Colors.teal[800], fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'ऑफिस प्रबंधन कक्ष (Functional Rooms):',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.indigo),
+            Text(
+              AppStrings.isEnglish ? 'Functional Rooms:' : 'ऑफिस प्रबंधन कक्ष (Functional Rooms):',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.indigo),
             ),
             const SizedBox(height: 10),
             Expanded(
@@ -167,40 +181,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   _buildRoomCard(
                     context,
-                    'Room 01: Attendance',
-                    'ऑटो-क्लीन ओसीआर और मिलान',
+                    AppStrings.isEnglish ? 'Room 01: Attendance' : 'Room 01: Attendance',
+                    AppStrings.isEnglish ? 'Auto-Clean OCR & Matching' : 'ऑटो-क्लीन ओसीआर और मिलान',
                     Icons.how_to_reg,
                     Colors.indigo,
                     const AttendanceMatchingScreen(),
                   ),
                   _buildRoomCard(
                     context,
-                    'Room 02: HR Helper',
-                    'स्टाफ रिकॉर्ड और सिक्योर Vault',
+                    AppStrings.isEnglish ? 'Room 02: HR Helper' : 'Room 02: HR Helper',
+                    AppStrings.isEnglish ? 'Staff Records & Vault' : 'स्टाफ रिकॉर्ड और सिक्योर Vault',
                     Icons.badge,
                     Colors.blueGrey,
                     const HRHelperScreen(),
                   ),
                   _buildRoomCard(
                     context,
-                    'Room 03: Expense',
-                    'खर्च और लेजर बही-खाता',
+                    AppStrings.isEnglish ? 'Room 03: Expense' : 'Room 03: Expense',
+                    AppStrings.isEnglish ? 'Expense & Ledger Book' : 'खर्च और लेजर बही-खाता',
                     Icons.account_balance_wallet,
                     Colors.teal,
                     const ExpenseTrackerScreen(),
                   ),
                   _buildRoomCard(
                     context,
-                    'Room 04: Task Hub',
-                    'टास्क और ड्यूटी मैनेजमेंट',
+                    AppStrings.isEnglish ? 'Room 04: Task Hub' : 'Room 04: Task Hub',
+                    AppStrings.isEnglish ? 'Tasks & Duty Management' : 'टास्क और ड्यूटी मैनेजमेंट',
                     Icons.task_alt,
                     Colors.deepPurple,
                     const TaskHubScreen(),
                   ),
                   _buildRoomCard(
                     context,
-                    'Room 05: Invoice',
-                    'प्रोफेशनल PDF और बिलिंग',
+                    AppStrings.isEnglish ? 'Room 05: Invoice' : 'Room 05: Invoice',
+                    AppStrings.isEnglish ? 'Professional PDF & Billing' : 'प्रोफेशनल PDF और बिलिंग',
                     Icons.receipt_long,
                     Colors.deepOrange,
                     const InvoiceGeneratorScreen(),
