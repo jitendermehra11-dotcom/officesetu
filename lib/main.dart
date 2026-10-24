@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart'; // **Firebase इम्पोर्ट जोड़ा गया**
 import 'package:officesetu/utils/app_strings.dart';
 import 'package:officesetu/screens/room1_attendance.dart';
 import 'package:officesetu/screens/room2_hr.dart';
@@ -7,7 +8,10 @@ import 'package:officesetu/screens/room3_expense.dart';
 import 'package:officesetu/screens/room4_task.dart';
 import 'package:officesetu/screens/room5_invoice.dart';
 
-void main() {
+void main() async {
+  // **Firebase को इनिशियलाइज करने के लिए async और binding जरूरी है**
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(const OfficeSetuApp());
 }
 
