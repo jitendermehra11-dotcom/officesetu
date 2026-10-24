@@ -23,24 +23,17 @@ jobs:
           flutter-version: '3.19.x'
           channel: 'stable'
           cache: false 
-                        
+                      
       - name: Generate Android Platform & Get Dependencies
         run: flutter create . --platforms=android --org com.officesetu.app && flutter pub get
 
       - name: Fix minSdkVersion to 21
-        run: |
-            python3 -c "
-            path = 'android/app/build.gradle'
-            with open(path, 'r') as f:
-            content = f.read()
-            content = content.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
-            content = content.replace('minSdkVersion 19', 'minSdkVersion 21')
-            content = content.replace('minSdkVersion 16', 'minSdkVersion 21')
-            with open(path, 'w') as f:
-            f.write(content)
-            "
+        run: python3 -c "p='android/app/build.gradle'; d=open(p).read(); open(p,'w').write(d.replace('minSdkVersion 19','minSdkVersion 21').replace('minSdkVersion 16','minSdkVersion 21').replace('minSdkVersion flutter.minSdkVersion','minSdkVersion 21'))"
+      
+
       - name: Clean Project
         run: flutter clean
+      
 
       - name: Build APK
         run: flutter build apk --release
