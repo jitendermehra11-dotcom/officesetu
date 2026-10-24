@@ -16,6 +16,10 @@ dependencies:
   speech_to_text: ^6.6.2
   google_mlkit_text_recognition: ^0.10.0
   excel: ^4.0.3 
+  # -- लाइव क्लाउड और सिक्योरिटी के लिए नए पैकेज --
+  firebase_core: ^2.24.2
+  cloud_firestore: ^4.15.8
+  firebase_auth: ^4.17.8
   
 dev_dependencies:
   flutter_test:
