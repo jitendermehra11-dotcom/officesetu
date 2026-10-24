@@ -76,6 +76,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // उपयोगकर्ता निर्देश (User Manual) दिखाने वाला डायलॉग
+  void _showUserManualDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('OfficeSetu - उपयोगकर्ता निर्देश'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: const <Widget>[
+                Text('• Room 01 (Attendance): ओसीआर स्कैनर से अटेंडेंस रजिस्टर स्कैन करें और मिलान करें।'),
+                SizedBox(height: 8),
+                Text('• Room 02 (HR Helper): स्टाफ के रिकॉर्ड और सिक्योर Vault प्रबंधित करें।'),
+                SizedBox(height: 8),
+                Text('• Room 03 (Expense): रोजाना के खर्चों और बही-खाते का हिसाब दर्ज करें।'),
+                SizedBox(height: 8),
+                Text('• Room 04 (Task Hub): टीम को टास्क अलॉट करें और प्रोग्रेस ट्रैक करें।'),
+                SizedBox(height: 8),
+                Text('• Room 05 (Invoice): प्रोफेशनल पीडीएफ बिल और बिलिंग तैयार करें।'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('समझ गया'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -83,6 +116,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('OfficeSetu - Master Dashboard'),
         backgroundColor: Colors.indigo[900],
         actions: [
+          // यूजर मैनुअल / हेल्प बटन
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => _showUserManualDialog(context),
+            tooltip: 'उपयोगकर्ता निर्देश (User Manual)',
+          ),
+          // सब्सक्रिप्शन और टियर स्थिति बटन
           IconButton(
             icon: const Icon(Icons.verified_user),
             onPressed: _showSubscriptionDialog,
