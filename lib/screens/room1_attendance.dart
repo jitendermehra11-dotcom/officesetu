@@ -24,10 +24,10 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
 
   final TextEditingController _empCodeController = TextEditingController(text: "EMP-401");
 
-  // स्मार्ट इमेज ऑटो-क्लीनिंग और ब्लूप्रिंट-आधारित ओसीआर इंजन
-  Future<void> _scanAndAutoCleanRegister() async {
+  // स्मार्ट इमेज ऑटो-क्लीनिंग और ब्लूप्रिंट-आधारित ओसीआर इंजन (कैमरा या गैलरी दोनों के लिए)
+  Future<void> _scanAndAutoCleanRegister(ImageSource source) async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.camera);
+    final pickedFile = await picker.pickImage(source: source);
 
     if (pickedFile != null) {
       setState(() {
@@ -137,17 +137,38 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            // Scan Button with Auto-Clean
-            ElevatedButton.icon(
-              onPressed: _isScanning ? null : _scanAndAutoCleanRegister,
-              icon: const Icon(Icons.camera_enhance),
-              label: Text(_isScanning ? 'ऑटो-क्लीन और स्कैनिंग जारी है...' : 'रफ रजिस्टर स्कैन करें (Smart Auto-Clean)[span_9](start_span)[span_9](end_span)'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo[800],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
+            
+            // Camera & Gallery Buttons Row
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isScanning ? null : () => _scanAndAutoCleanRegister(ImageSource.camera),
+                    icon: const Icon(Icons.camera_alt),
+                    label: Text(_isScanning ? 'प्रक्रिया...' : 'कैमरा (Live)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isScanning ? null : () => _scanAndAutoCleanRegister(ImageSource.gallery),
+                    icon: const Icon(Icons.photo_library),
+                    label: Text(_isScanning ? 'प्रक्रिया...' : 'गैलरी / स्क्रीनशॉट'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ),
+            
             const SizedBox(height: 6),
             Text(
               'स्थिति: $_cleanStatus',
@@ -206,7 +227,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
               icon: const Icon(Icons.picture_as_pdf),
               label: const Text('सत्यापित रिपोर्ट PDF में डाउनलोड/प्रिंट करें'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal[800],
+                backgroundColor: Colors.teal[900],
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
