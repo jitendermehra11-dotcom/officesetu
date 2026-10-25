@@ -1,6 +1,6 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart'; // **Firebase इम्पोर्ट जोड़ा गया**
+import 'package:firebase_core/firebase_core.dart';
 import 'package:officesetu/utils/app_strings.dart';
 import 'package:officesetu/screens/room1_attendance.dart';
 import 'package:officesetu/screens/room2_hr.dart';
@@ -9,7 +9,6 @@ import 'package:officesetu/screens/room4_task.dart';
 import 'package:officesetu/screens/room5_invoice.dart';
 
 void main() async {
-  // **Firebase को इनिशियलाइज करने के लिए async और binding जरूरी है**
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   runApp(const OfficeSetuApp());
@@ -81,7 +80,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // उपयोगकर्ता निर्देश (User Manual) दिखाने वाला डायलॉग
   void _showUserManualDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -121,7 +119,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Text(AppStrings.appTitle),
         backgroundColor: Colors.indigo[900],
         actions: [
-          // भाषा बदलने वाला बटन (Language Toggle)
           IconButton(
             icon: const Icon(Icons.language),
             tooltip: AppStrings.isEnglish ? 'Switch to Hindi' : 'Switch to English',
@@ -134,13 +131,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               );
             },
           ),
-          // यूजर मैनुअल / हेल्प बटन
           IconButton(
             icon: const Icon(Icons.help_outline),
             onPressed: () => _showUserManualDialog(context),
             tooltip: AppStrings.isEnglish ? 'User Manual' : 'उपयोगकर्ता निर्देश',
           ),
-          // सब्सक्रिप्शन और टियर स्थिति बटन
           IconButton(
             icon: const Icon(Icons.verified_user),
             onPressed: _showSubscriptionDialog,
