@@ -1,5 +1,6 @@
 // lib/screens/room4_task.dart
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TaskHubScreen extends StatefulWidget {
   const TaskHubScreen({Key? key}) : super(key: key);
@@ -9,28 +10,43 @@ class TaskHubScreen extends StatefulWidget {
 }
 
 class _TaskHubScreenState extends State<TaskHubScreen> {
-  final List<Map<String, String>> _tasks = [
-    {"title": "सुबह की शिफ्ट का अटेंडेंस मिलान", "priority": "High", "status": "Pending"},
-    {"title": "मशीन नंबर 04 का मेंटेनेंस चेक", "priority": "Medium", "status": "In Progress"},
-    {"title": "स्टॉक रजिस्टर का वीकली ऑडिट", "priority": "Low", "status": "Completed"},
-  ];
-
   final TextEditingController _taskController = TextEditingController();
   String _selectedPriority = "Medium";
 
-  void _addNewTask() {
-    if (_taskController.text.isNotEmpty) {
-      setState(() {
-        _tasks.add({
-          "title": _taskController.text,
-          "priority": _selectedPriority,
-          "status": "Pending",
-        });
+  // फायरस्टोर में टास्क सेव करने का लाइव फंक्शन
+  Future<void> _saveTaskToFirestore(String title, String priority) async {
+    try {
+      await FirebaseFirestore.instance.collection('office_tasks').add({
+        'title': title,
+        'priority': priority,
+        'status': 'Pending',
+        'timestamp': FieldValue.serverTimestamp(),
       });
+    } catch (e) {
+      debugPrint("Firebase Task Save Error: $e");
+    }
+  }
+
+  // टास्क की स्थिति (Status) बदलने का लाइव फंक्शन
+  Future<void> _toggleTaskStatusInFirestore(String docId, String currentStatus) async {
+    try {
+      String newStatus = currentStatus == "Completed" ? "Pending" : "Completed";
+      await FirebaseFirestore.instance.collection('office_tasks').doc(docId).update({
+        'status': newStatus,
+      });
+    } catch (e) {
+      debugPrint("Firebase Task Update Error: $e");
+    }
+  }
+
+  // नया टास्क जोड़ने का लॉजिक
+  Future<void> _addNewTask() async {
+    if (_taskController.text.isNotEmpty) {
+      await _saveTaskToFirestore(_taskController.text, _selectedPriority);
       _taskController.clear();
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('नया टास्क सफलतापूर्वक जोड़ दिया गया!')),
+        const SnackBar(content: Text('नया टास्क लाइव क्लाउड पर जोड़ दिया गया!')),
       );
     }
   }
@@ -40,7 +56,7 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('नया टास्क असाइन करें'),
+          title: const Text('नया टास्क असाइन करें (Live Task)'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -111,41 +127,57 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'सक्रिय टास्क सूची (Active Task List):',
+              'लाइव टास्क सूची (Firestore Active Task List):',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.deepPurple),
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: ListView.builder(
-                itemCount: _tasks.length,
-                itemBuilder: (context, index) {
-                  final task = _tasks[index];
-                  bool isCompleted = task["status"] == "Completed";
-                  return Card(
-                    elevation: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: isCompleted ? Colors.green[700] : Colors.deepPurple[700],
-                        child: Icon(isCompleted ? Icons.check : Icons.assignment, color: Colors.white, size: 20),
-                      ),
-                      title: Text(
-                        task["title"]!,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          decoration: isCompleted ? TextDecoration.lineThrough : null,
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('office_tasks').orderBy('timestamp', descending: true).snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Center(child: Text('कोई सक्रिय टास्क नहीं मिला।', style: TextStyle(color: Colors.grey)));
+                  }
+
+                  final docs = snapshot.data!.docs;
+
+                  return ListView.builder(
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final title = data['title'] ?? 'टास्क';
+                      final priority = data['priority'] ?? 'Medium';
+                      final status = data['status'] ?? 'Pending';
+                      bool isCompleted = status == "Completed";
+
+                      return Card(
+                        elevation: 2,
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isCompleted ? Colors.green[700] : Colors.deepPurple[700],
+                            child: Icon(isCompleted ? Icons.check : Icons.assignment, color: Colors.white, size: 20),
+                          ),
+                          title: Text(
+                            title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              decoration: isCompleted ? TextDecoration.lineThrough : null,
+                            ),
+                          ),
+                          subtitle: Text('प्राथमिकता: $priority | स्थिति: $status'),
+                          trailing: IconButton(
+                            icon: Icon(isCompleted ? Icons.undo : Icons.done, color: isCompleted ? Colors.orange : Colors.green),
+                            onPressed: () => _toggleTaskStatusInFirestore(doc.id, status),
+                          ),
                         ),
-                      ),
-                      subtitle: Text('प्राथमिकता: ${task["priority"]} | स्थिति: ${task["status"]}'),
-                      trailing: IconButton(
-                        icon: Icon(isCompleted ? Icons.undo : Icons.done, color: isCompleted ? Colors.orange : Colors.green),
-                        onPressed: () {
-                          setState(() {
-                            _tasks[index]["status"] = isCompleted ? "Pending" : "Completed";
-                          });
-                        },
-                      ),
-                    ),
+                      );
+                    },
                   );
                 },
               ),
