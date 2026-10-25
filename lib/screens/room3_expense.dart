@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 
 class ExpenseTrackerScreen extends StatefulWidget {
@@ -12,21 +13,25 @@ class ExpenseTrackerScreen extends StatefulWidget {
 }
 
 class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
-  // सिक्योर लेजर डेटाबेस लिस्ट
-  final List<Map<String, dynamic>> _expenses = [
-    {"title": "ऑफिस स्टेशनरी और पेन", "amount": 450.0, "category": "Supplies", "date": "12 Oct 2026"},
-    {"title": "चाय और रिफ्रेशमेंट", "amount": 250.0, "category": "Food", "date": "13 Oct 2026"},
-    {"title": "मशीन मेंटेनेंस पार्ट", "amount": 1200.0, "category": "Maintenance", "date": "14 Oct 2026"},
-  ];
-
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   String _selectedCategory = "Supplies";
   bool _isScanningReceipt = false;
   String _receiptScanStatus = "बिल/रसीद स्कैन करके ऑटो-अमाउंट जोड़ने के लिए तैयार";
 
-  double get _totalExpense {
-    return _expenses.fold(0.0, (sum, item) => sum + (item["amount"] as double));
+  // फायरस्टोर में खर्च सेव करने का लाइव फंक्शन
+  Future<void> _saveExpenseToFirestore(Map<String, dynamic> expData) async {
+    try {
+      await FirebaseFirestore.instance.collection('office_expenses').add({
+        'title': expData['title'],
+        'amount': expData['amount'],
+        'category': expData['category'],
+        'date': expData['date'],
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Firebase Expense Save Error: $e");
+    }
   }
 
   // रसीद या बिल की फोटो से OCR द्वारा राशि और विवरण डिटेक्ट करने का सिक्योर इंजन
@@ -46,11 +51,10 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
 
       String rawText = recognizedText.text;
       
-      // राशि (Amount) खोजने के लिए मुद्रा प्रतीक या अंकों का पैटर्न
       RegExp amountRegex = RegExp(r'(?:₹|Rs\.?|INR)?\s*([0-9]+(?:\.[0-9]{1,2})?)', caseSensitive: false);
       Iterable<RegExpMatch> matches = amountRegex.allMatches(rawText);
 
-      double detectedAmount = 500.0; // डिफ़ॉल्ट फॉールबैक वैल्यू यदि सटीक मैच न मिले
+      double detectedAmount = 500.0;
       for (final m in matches) {
         if (m.group(1) != null) {
           double? parsed = double.tryParse(m.group(1)!);
@@ -61,14 +65,17 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
         }
       }
 
+      Map<String, dynamic> newExp = {
+        "title": rawText.isNotEmpty ? rawText.split('\n')[0].trim() : "स्कैन किया गया बिल",
+        "amount": detectedAmount,
+        "category": "Scanned Bill",
+        "date": "${DateTime.now().day} Oct 2026",
+      };
+
+      await _saveExpenseToFirestore(newExp);
+
       setState(() {
-        _expenses.add({
-          "title": rawText.isNotEmpty ? rawText.split('\n')[0].trim() : "स्कैन किया गया बिल",
-          "amount": detectedAmount,
-          "category": "Scanned Bill",
-          "date": "${DateTime.now().day} Oct 2026",
-        });
-        _receiptScanStatus = "सफलतापूर्वक बिल स्कैन करके खर्च दर्ज कर दिया गया!";
+        _receiptScanStatus = "सफलतापूर्वक बिल स्कैन करके लाइव खर्च दर्ज कर दिया गया!";
         _isScanningReceipt = false;
       });
 
@@ -77,23 +84,24 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
   }
 
   // मैनुअल खर्च जोड़ने का लॉजिक
-  void _addExpense() {
+  Future<void> _addExpense() async {
     if (_titleController.text.isNotEmpty && _amountController.text.isNotEmpty) {
       double? amt = double.tryParse(_amountController.text);
       if (amt != null) {
-        setState(() {
-          _expenses.add({
-            "title": _titleController.text,
-            "amount": amt,
-            "category": _selectedCategory,
-            "date": "${DateTime.now().day} Oct 2026",
-          });
-        });
+        Map<String, dynamic> newExp = {
+          "title": _titleController.text,
+          "amount": amt,
+          "category": _selectedCategory,
+          "date": "${DateTime.now().day} Oct 2026",
+        };
+
+        await _saveExpenseToFirestore(newExp);
+
         _titleController.clear();
         _amountController.clear();
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('नया खर्च सुरक्षित बही-खाते में दर्ज हो गया!')),
+          const SnackBar(content: Text('नया खर्च लाइव बही-खाते में दर्ज हो गया!')),
         );
       }
     }
@@ -105,7 +113,7 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('नया खर्च दर्ज करें (Secure Ledger)'),
+          title: const Text('नया खर्च दर्ज करें (Live Ledger)'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -172,86 +180,121 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Total Expense Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.teal[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.teal.withOpacity(0.5)),
-              ),
-              child: Column(
-                children: [
-                  const Text('कुल कार्यालय खर्च (Total Office Ledger Expense)', style: TextStyle(fontSize: 13, color: Colors.teal, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Text('₹ $_totalExpense', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.teal[900])),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Action Buttons Row
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _showAddExpenseDialog,
-                    icon: const Icon(Icons.add_circle, size: 18),
-                    label: const Text('मैनुअल जोड़ें'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isScanningReceipt ? null : _scanAndAutoAddReceipt,
-                    icon: const Icon(Icons.camera_alt, size: 18),
-                    label: Text(_isScanningReceipt ? 'स्कैनिंग...' : 'बिल स्कैन करके जोड़ें'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _receiptScanStatus,
-              style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'खर्चों का सुरक्षित बही-खाता (Secure Ledger History):',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal),
-            ),
-            const SizedBox(height: 8),
+            // StreamBuilder के जरिए लाइव डेटा और कुल योग (Total Expense) दिखाना
             Expanded(
-              child: ListView.builder(
-                itemCount: _expenses.length,
-                itemBuilder: (context, index) {
-                  final exp = _expenses[index];
-                  return Card(
-                    elevation: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.teal[700],
-                        child: const Icon(Icons.receipt, color: Colors.white, size: 20),
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('office_expenses').orderBy('timestamp', descending: true).snapshots(),
+                builder: (context, snapshot) {
+                  double totalExpense = 0.0;
+                  List docs = [];
+
+                  if (snapshot.hasData) {
+                    docs = snapshot.data!.docs;
+                    for (var doc in docs) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      totalExpense += (data['amount'] ?? 0.0) as double;
+                    }
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Total Expense Card
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.teal[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.teal.withOpacity(0.5)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text('कुल कार्यालय खर्च (Live Total Office Expense)', style: TextStyle(fontSize: 13, color: Colors.teal, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Text('₹ $totalExpense', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.teal[900])),
+                          ],
+                        ),
                       ),
-                      title: Text(exp["title"], style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('श्रेणी: ${exp["category"]} | दिनांक: ${exp["date"]}'),
-                      trailing: Text(
-                        '₹ ${exp["amount"]}',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal[800]),
+                      const SizedBox(height: 14),
+
+                      // Action Buttons Row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _showAddExpenseDialog,
+                              icon: const Icon(Icons.add_circle, size: 18),
+                              label: const Text('मैनुअल जोड़ें'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal[800],
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _isScanningReceipt ? null : _scanAndAutoAddReceipt,
+                              icon: const Icon(Icons.camera_alt, size: 18),
+                              label: Text(_isScanningReceipt ? 'स्कैनिंग...' : 'बिल स्कैन करके जोड़ें'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.indigo[800],
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _receiptScanStatus,
+                        style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'खर्चों का लाइव बही-खाता (Firestore Ledger History):',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // List View
+                      Expanded(
+                        child: snapshot.connectionState == ConnectionState.waiting
+                            ? const Center(child: CircularProgressIndicator())
+                            : docs.isEmpty
+                                ? const Center(child: Text('कोई खर्च रिकॉर्ड नहीं मिला।', style: TextStyle(color: Colors.grey)))
+                                : ListView.builder(
+                                    itemCount: docs.length,
+                                    itemBuilder: (context, index) {
+                                      final data = docs[index].data() as Map<String, dynamic>;
+                                      final title = data['title'] ?? 'खर्च';
+                                      final amount = data['amount'] ?? 0.0;
+                                      final category = data['category'] ?? 'Misc';
+                                      final date = data['date'] ?? 'आज';
+
+                                      return Card(
+                                        elevation: 2,
+                                        margin: const EdgeInsets.symmetric(vertical: 6),
+                                        child: ListTile(
+                                          leading: CircleAvatar(
+                                            backgroundColor: Colors.teal[700],
+                                            child: const Icon(Icons.receipt, color: Colors.white, size: 20),
+                                          ),
+                                          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                          subtitle: Text('श्रेणी: $category | दिनांक: $date'),
+                                          trailing: Text(
+                                            '₹ $amount',
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal[800]),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                      ),
+                    ],
                   );
                 },
               ),
