@@ -29,11 +29,9 @@ jobs:
 
       - name: Fix minSdkVersion to 21
         run: python3 -c "p='android/app/build.gradle'; d=open(p).read(); open(p,'w').write(d.replace('minSdkVersion 19','minSdkVersion 21').replace('minSdkVersion 16','minSdkVersion 21').replace('minSdkVersion flutter.minSdkVersion','minSdkVersion 21'))"
-      
 
       - name: Clean Project
         run: flutter clean
-      
 
       - name: Build APK
         run: flutter build apk --release
@@ -41,7 +39,5 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with: 
-         -name: officesetu-Release-APK
-         path: build/app/outputs/flutter-apk/app-release.apk
-
-          
+          name: officesetu-Release-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
