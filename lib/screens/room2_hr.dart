@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 
 class HRHelperScreen extends StatefulWidget {
@@ -12,19 +13,28 @@ class HRHelperScreen extends StatefulWidget {
 }
 
 class _HRHelperScreenState extends State<HRHelperScreen> {
-  // सिक्योर लोकल डेटाबेस लिस्ट (एंप्लॉई, रोल, स्टेटस और लीव ट्रैकिंग के साथ)
-  final List<Map<String, String>> _employees = [
-    {"code": "EMP-101", "name": "राजेश कुमार", "role": "Shift Supervisor", "status": "Active", "leave": "No Leave"},
-    {"code": "EMP-102", "name": "अमित शर्मा", "role": "Machine Operator", "status": "Active", "leave": "Approved Leave"},
-    {"code": "EMP-103", "name": "सुनील वर्मा", "role": "Quality Inspector", "status": "On Leave", "leave": "Pending Request"},
-  ];
-
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _codeController = TextEditingController();
   final TextEditingController _roleController = TextEditingController();
   
   bool _isProcessing = false;
   String _scanStatusText = "सिक्योर HR Vault तैयार - रजिस्टर स्कैन या मैनुअल एंट्री करें";
+
+  // फायरस्टोर में नया कर्मचारी सेव करने का लाइव फंक्शन
+  Future<void> _saveEmployeeToFirestore(Map<String, String> empData) async {
+    try {
+      await FirebaseFirestore.instance.collection('staff_records').add({
+        'code': empData['code'],
+        'name': empData['name'],
+        'role': empData['role'],
+        'status': empData['status'],
+        'leave': empData['leave'],
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Firebase Save Error: $e");
+    }
+  }
 
   // फोटो से OCR द्वारा स्टाफ नाम और कोड डिटेक्ट करके ऑटो-जोड़ने का सुरक्षित इंजन
   Future<void> _scanAndAutoAddStaff() async {
@@ -47,15 +57,19 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
         List<String> lines = rawText.split('\n');
         String extractedName = lines.isNotEmpty ? lines[0].trim() : "स्कैन किया गया स्टाफ";
 
+        Map<String, String> newEmp = {
+          "code": "EMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}",
+          "name": extractedName,
+          "role": "General Staff (Auto-Scanned Vault)",
+          "status": "Active",
+          "leave": "No Leave",
+        };
+
+        // फायरबेस पर लाइव सेव करें
+        await _saveEmployeeToFirestore(newEmp);
+
         setState(() {
-          _employees.add({
-            "code": "EMP-${100 + _employees.length + 1}",
-            "name": extractedName,
-            "role": "General Staff (Auto-Scanned Vault)",
-            "status": "Active",
-            "leave": "No Leave",
-          });
-          _scanStatusText = "सफलतापूर्वक स्कैन करके स्टाफ को सिक्योर Vault में जोड़ दिया गया!";
+          _scanStatusText = "सफलतापूर्वक स्कैन करके स्टाफ को लाइव Vault में जोड़ दिया गया!";
           _isProcessing = false;
         });
       } else {
@@ -70,23 +84,25 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
   }
 
   // नया कर्मचारी सुरक्षित तरीके से जोड़ने का लॉजिक
-  void _addNewEmployee() {
+  Future<void> _addNewEmployee() async {
     if (_nameController.text.isNotEmpty && _codeController.text.isNotEmpty && _roleController.text.isNotEmpty) {
-      setState(() {
-        _employees.add({
-          "code": _codeController.text,
-          "name": _nameController.text,
-          "role": _roleController.text,
-          "status": "Active",
-          "leave": "No Leave",
-        });
-      });
+      Map<String, String> newEmp = {
+        "code": _codeController.text,
+        "name": _nameController.text,
+        "role": _roleController.text,
+        "status": "Active",
+        "leave": "No Leave",
+      };
+
+      // फायरबेस पर लाइव सेव करें
+      await _saveEmployeeToFirestore(newEmp);
+
       _nameController.clear();
       _codeController.clear();
       _roleController.clear();
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('कर्मचारी सुरक्षित रूप से HR Vault में दर्ज हो गया!')),
+        const SnackBar(content: Text('कर्मचारी लाइव HR Vault में सुरक्षित दर्ज हो गया!')),
       );
     }
   }
@@ -183,41 +199,65 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'सुरक्षित एंप्लॉई डेटाबेस (Excel Ready & Encrypted Vault):',
+              'लाइव क्लाउड एंप्लॉई डेटाबेस (Firestore Vault):',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueGrey),
             ),
             const SizedBox(height: 8),
+            // StreamBuilder के जरिए फायरस्टोर से लाइव डेटा दिखाना
             Expanded(
-              child: ListView.builder(
-                itemCount: _employees.length,
-                itemBuilder: (context, index) {
-                  final emp = _employees[index];
-                  return Card(
-                    elevation: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.blueGrey[700],
-                        child: Text(emp["name"]![0], style: const TextStyle(color: Colors.white)),
-                      ),
-                      title: Text('${emp["name"]} (${emp["code"]})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('पद: ${emp["role"]} | छुट्टी स्थिति: ${emp["leave"]}'),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: emp["status"] == "Active" ? Colors.green[100] : Colors.orange[100],
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          emp["status"]!,
-                          style: TextStyle(
-                            color: emp["status"] == "Active" ? Colors.green[800] : Colors.orange[800],
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('staff_records').orderBy('timestamp', descending: true).snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Center(
+                      child: Text('कोई स्टाफ रिकॉर्ड नहीं मिला। नया कर्मचारी जोड़ें।', style: TextStyle(color: Colors.grey)),
+                    );
+                  }
+
+                  final docs = snapshot.data!.docs;
+
+                  return ListView.builder(
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      final data = docs[index].data() as Map<String, dynamic>;
+                      final name = data['name'] ?? 'अज्ञात';
+                      final code = data['code'] ?? 'EMP-000';
+                      final role = data['role'] ?? 'स्टाफ';
+                      final status = data['status'] ?? 'Active';
+                      final leave = data['leave'] ?? 'No Leave';
+
+                      return Card(
+                        elevation: 2,
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.blueGrey[700],
+                            child: Text(name.isNotEmpty ? name[0] : 'E', style: const TextStyle(color: Colors.white)),
+                          ),
+                          title: Text('$name ($code)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('पद: $role | छुट्टी स्थिति: $leave'),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: status == "Active" ? Colors.green[100] : Colors.orange[100],
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              status,
+                              style: TextStyle(
+                                color: status == "Active" ? Colors.green[800] : Colors.orange[800],
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   );
                 },
               ),
