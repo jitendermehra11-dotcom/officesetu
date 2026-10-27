@@ -1,6 +1,10 @@
 // lib/screens/room4_task.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:excel/excel.dart' as excel_lib;
+import 'package:printing/printing.dart';
+import 'package:flutter/foundation.dart';
 
 class TaskHubScreen extends StatefulWidget {
   const TaskHubScreen({Key? key}) : super(key: key);
@@ -12,6 +16,38 @@ class TaskHubScreen extends StatefulWidget {
 class _TaskHubScreenState extends State<TaskHubScreen> {
   final TextEditingController _taskController = TextEditingController();
   String _selectedPriority = "Medium";
+
+  // Speech to Text (वॉइस टाइपिंग के लिए)
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _speech = stt.SpeechToText();
+  }
+
+  // बोलकर टास्क का विवरण दर्ज करने के लिए माइक कमांड
+  void _listenVoiceInput() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => print('status: $val'),
+        onError: (val) => print('error: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          localeId: 'hi_IN',
+          onResult: (val) => setState(() {
+            _taskController.text = val.recognizedWords;
+          }),
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
+  }
 
   // फायरस्टोर में टास्क सेव करने का लाइव फंक्शन
   Future<void> _saveTaskToFirestore(String title, String priority) async {
@@ -51,6 +87,39 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
     }
   }
 
+  // पूरा टास्क डेटा Excel शीट में एक्सपोर्ट करने का फंक्शन
+  Future<void> _exportTasksToExcel() async {
+    var querySnapshot = await FirebaseFirestore.instance.collection('office_tasks').orderBy('timestamp', descending: true).get();
+    
+    var excel = excel_lib.Excel.createExcel();
+    String sheetName = 'Office_Tasks';
+    excel.rename(excel.getDefaultSheet()!, sheetName);
+
+    excel_lib.Sheet sheetObject = excel[sheetName];
+    
+    // एक्सेल हेडर
+    sheetObject.appendRow([
+      excel_lib.TextCellValue('Task Description'),
+      excel_lib.TextCellValue('Priority'),
+      excel_lib.TextCellValue('Status')
+    ]);
+
+    // डेटा रो जोड़ना
+    for (var doc in querySnapshot.docs) {
+      var data = doc.data();
+      sheetObject.appendRow([
+        excel_lib.TextCellValue(data['title'] ?? ''),
+        excel_lib.TextCellValue(data['priority'] ?? ''),
+        excel_lib.TextCellValue(data['status'] ?? '')
+      ]);
+    }
+
+    var fileBytes = excel.save();
+    if (fileBytes != null) {
+      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_task_report.xlsx');
+    }
+  }
+
   void _showAddTaskDialog() {
     showDialog(
       context: context,
@@ -60,9 +129,19 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: _taskController,
-                decoration: const InputDecoration(labelText: 'टास्क का विवरण (Task Description)'),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _taskController,
+                      decoration: const InputDecoration(labelText: 'टास्क विवरण (या बोलकर भरें)'),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: Colors.deepPurple),
+                    onPressed: _listenVoiceInput,
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               Row(
@@ -115,15 +194,35 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ElevatedButton.icon(
-              onPressed: _showAddTaskDialog,
-              icon: const Icon(Icons.add_task, size: 20),
-              label: const Text('नया टास्क असाइन करें (Add Task)'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple[800],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
+            // Action Buttons Row (टास्क जोड़ें और एक्सेल एक्सपोर्ट)
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _showAddTaskDialog,
+                    icon: const Icon(Icons.add_task, size: 18),
+                    label: const Text('नया टास्क जोड़ें'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _exportTasksToExcel,
+                    icon: const Icon(Icons.table_chart, size: 18),
+                    label: const Text('Excel शीट'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             const Text(
