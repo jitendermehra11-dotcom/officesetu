@@ -10,7 +10,14 @@ import 'package:officesetu/screens/room5_invoice.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  
+  try {
+    // 6 second safety timeout taaki slow net par bhi app na atke
+    await Firebase.initializeApp().timeout(const Duration(seconds: 6));
+  } catch (e) {
+    debugPrint('Firebase initialization timeout or error: $e');
+  }
+
   runApp(const OfficeSetuApp());
 }
 
