@@ -2,7 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:excel/excel.dart' as excel_lib;
+import 'package:printing/printing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 class ExpenseTrackerScreen extends StatefulWidget {
@@ -17,7 +21,39 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
   final TextEditingController _amountController = TextEditingController();
   String _selectedCategory = "Supplies";
   bool _isScanningReceipt = false;
-  String _receiptScanStatus = "बिल/रसीद स्कैन करके ऑटो-अमाउंट जोड़ने के लिए तैयार";
+  String _receiptScanStatus = "बिल स्कैन या वॉइस कमांड द्वारा खर्च जोड़ने के लिए तैयार";
+
+  // Speech to Text (वॉइस टाइपिंग के लिए)
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _speech = stt.SpeechToText();
+  }
+
+  // बोलकर विवरण या राशि दर्ज करने के लिए माइक कमांड
+  void _listenVoiceInput(TextEditingController targetController) async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => print('status: $val'),
+        onError: (val) => print('error: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          localeId: 'hi_IN',
+          onResult: (val) => setState(() {
+            targetController.text = val.recognizedWords;
+          }),
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
+  }
 
   // फायरस्टोर में खर्च सेव करने का लाइव फंक्शन
   Future<void> _saveExpenseToFirestore(Map<String, dynamic> expData) async {
@@ -107,7 +143,42 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
     }
   }
 
-  // नया खर्च जोड़ने का डायलॉग बॉक्स
+  // पूरे खर्च का बही-खाता Excel शीट में एक्सपोर्ट करने का फंक्शन
+  Future<void> _exportExpenseToExcel() async {
+    var querySnapshot = await FirebaseFirestore.instance.collection('office_expenses').get();
+    
+    var excel = excel_lib.Excel.createExcel();
+    String sheetName = 'Expense_Ledger';
+    excel.rename(excel.getDefaultSheet()!, sheetName);
+
+    excel_lib.Sheet sheetObject = excel[sheetName];
+    
+    // एक्सेल हेडर
+    sheetObject.appendRow([
+      excel_lib.TextCellValue('Expense Description'),
+      excel_lib.TextCellValue('Amount (₹)'),
+      excel_lib.TextCellValue('Category'),
+      excel_lib.TextCellValue('Date')
+    ]);
+
+    // डेटा रो जोड़ना
+    for (var doc in querySnapshot.docs) {
+      var data = doc.data();
+      sheetObject.appendRow([
+        excel_lib.TextCellValue(data['title'] ?? ''),
+        excel_lib.TextCellValue(data['amount'].toString()),
+        excel_lib.TextCellValue(data['category'] ?? ''),
+        excel_lib.TextCellValue(data['date'] ?? '')
+      ]);
+    }
+
+    var fileBytes = excel.save();
+    if (fileBytes != null) {
+      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_expense_ledger.xlsx');
+    }
+  }
+
+  // नया खर्च जोड़ने का डायलॉग बॉक्स (माइक सपोर्ट के साथ)
   void _showAddExpenseDialog() {
     showDialog(
       context: context,
@@ -118,15 +189,35 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(labelText: 'खर्च का विवरण (Description)'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _titleController,
+                        decoration: const InputDecoration(labelText: 'खर्च का विवरण (Description)'),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.mic, color: Colors.teal),
+                      onPressed: () => _listenVoiceInput(_titleController),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _amountController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'रुपये (Amount in ₹)'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _amountController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'रुपये (Amount in ₹)'),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.mic, color: Colors.teal),
+                      onPressed: () => _listenVoiceInput(_amountController),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -180,7 +271,6 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // StreamBuilder के जरिए लाइव डेटा और कुल योग (Total Expense) दिखाना
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance.collection('office_expenses').orderBy('timestamp', descending: true).snapshots(),
@@ -217,13 +307,13 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Action Buttons Row
+                      // Action Buttons Row (मैनुअल, बिल स्कैन और एक्सेल एक्सपोर्ट)
                       Row(
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: _showAddExpenseDialog,
-                              icon: const Icon(Icons.add_circle, size: 18),
+                              icon: const Icon(Icons.add_circle, size: 16),
                               label: const Text('मैनुअल जोड़ें'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.teal[800],
@@ -232,14 +322,27 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: _isScanningReceipt ? null : _scanAndAutoAddReceipt,
-                              icon: const Icon(Icons.camera_alt, size: 18),
-                              label: Text(_isScanningReceipt ? 'स्कैनिंग...' : 'बिल स्कैन करके जोड़ें'),
+                              icon: const Icon(Icons.camera_alt, size: 16),
+                              label: Text(_isScanningReceipt ? 'स्कैनिंग...' : 'बिल OCR स्कैन'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.indigo[800],
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _exportExpenseToExcel,
+                              icon: const Icon(Icons.table_chart, size: 16),
+                              label: const Text('Excel शीट'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green[800],
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
