@@ -2,7 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:excel/excel.dart' as excel_lib;
+import 'package:printing/printing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 class HRHelperScreen extends StatefulWidget {
@@ -18,7 +22,39 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
   final TextEditingController _roleController = TextEditingController();
   
   bool _isProcessing = false;
-  String _scanStatusText = "सिक्योर HR Vault तैयार - रजिस्टर स्कैन या मैनुअल एंट्री करें";
+  String _scanStatusText = "सिक्योर HR Vault तैयार - रजिस्टर स्कैन या वॉइस कमांड दें";
+
+  // Speech to Text (वॉइस टाइपिंग के लिए)
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _speech = stt.SpeechToText();
+  }
+
+  // बोलकर कर्मचारी का नाम या विवरण दर्ज करने के लिए माइक कमांड
+  void _listenVoiceInput(TextEditingController targetController) async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => print('status: $val'),
+        onError: (val) => print('error: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          localeId: 'hi_IN',
+          onResult: (val) => setState(() {
+            targetController.text = val.recognizedWords;
+          }),
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
+  }
 
   // फायरस्टोर में नया कर्मचारी सेव करने का लाइव फंक्शन
   Future<void> _saveEmployeeToFirestore(Map<String, String> empData) async {
@@ -94,7 +130,6 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
         "leave": "No Leave",
       };
 
-      // फायरबेस पर लाइव सेव करें
       await _saveEmployeeToFirestore(newEmp);
 
       _nameController.clear();
@@ -107,7 +142,44 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
     }
   }
 
-  // नया एंप्लॉई जोड़ने का डायलॉग बॉक्स
+  // पूरा स्टाफ डेटा Excel शीट में एक्सपोर्ट करने का फंक्शन
+  Future<void> _exportStaffToExcel() async {
+    var querySnapshot = await FirebaseFirestore.instance.collection('staff_records').get();
+    
+    var excel = excel_lib.Excel.createExcel();
+    String sheetName = 'HR_Staff_Vault';
+    excel.rename(excel.getDefaultSheet()!, sheetName);
+
+    excel_lib.Sheet sheetObject = excel[sheetName];
+    
+    // एक्सेल हेडर
+    sheetObject.appendRow([
+      excel_lib.TextCellValue('Employee Code'),
+      excel_lib.TextCellValue('Staff Name'),
+      excel_lib.TextCellValue('Role / Designation'),
+      excel_lib.TextCellValue('Status'),
+      excel_lib.TextCellValue('Leave Status')
+    ]);
+
+    // डेटा रो जोड़ना
+    for (var doc in querySnapshot.docs) {
+      var data = doc.data();
+      sheetObject.appendRow([
+        excel_lib.TextCellValue(data['code'] ?? ''),
+        excel_lib.TextCellValue(data['name'] ?? ''),
+        excel_lib.TextCellValue(data['role'] ?? ''),
+        excel_lib.TextCellValue(data['status'] ?? ''),
+        excel_lib.TextCellValue(data['leave'] ?? '')
+      ]);
+    }
+
+    var fileBytes = excel.save();
+    if (fileBytes != null) {
+      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_hr_staff_report.xlsx');
+    }
+  }
+
+  // नया एंप्लॉई जोड़ने का डायलॉग बॉक्स (माइक सपोर्ट के साथ)
   void _showAddEmployeeDialog() {
     showDialog(
       context: context,
@@ -117,19 +189,49 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: _codeController,
-                decoration: const InputDecoration(labelText: 'कर्मचारी कोड (जैसे EMP-104)'),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _codeController,
+                      decoration: const InputDecoration(labelText: 'कर्मचारी कोड (उदा. EMP-104)'),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.mic, color: Colors.blueGrey),
+                    onPressed: () => _listenVoiceInput(_codeController),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'कर्मचारी का पूरा नाम'),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(labelText: 'कर्मचारी का पूरा नाम'),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.mic, color: Colors.blueGrey),
+                    onPressed: () => _listenVoiceInput(_nameController),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
-              TextField(
-                controller: _roleController,
-                decoration: const InputDecoration(labelText: 'पद / भूमिका (Role/Designation)'),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _roleController,
+                      decoration: const InputDecoration(labelText: 'पद / भूमिका (Designation)'),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.mic, color: Colors.blueGrey),
+                    onPressed: () => _listenVoiceInput(_roleController),
+                  ),
+                ],
               ),
             ],
           ),
@@ -161,13 +263,13 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Action Buttons Row
+            // Action Buttons Row (मैनुअल, ऑटो-स्कैन और एक्सेल एक्सपोर्ट)
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _showAddEmployeeDialog,
-                    icon: const Icon(Icons.person_add, size: 18),
+                    icon: const Icon(Icons.person_add, size: 16),
                     label: const Text('मैनुअल जोड़ें'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueGrey[800],
@@ -176,14 +278,27 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _isProcessing ? null : _scanAndAutoAddStaff,
-                    icon: const Icon(Icons.camera_alt, size: 18),
-                    label: Text(_isProcessing ? 'स्कैनिंग...' : 'फोटो से ऑटो-जोड़ें'),
+                    icon: const Icon(Icons.camera_alt, size: 16),
+                    label: Text(_isProcessing ? 'स्कैनिंग...' : 'फोटो से OCR'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _exportStaffToExcel,
+                    icon: const Icon(Icons.table_chart, size: 16),
+                    label: const Text('Excel शीट'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[800],
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -203,6 +318,7 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueGrey),
             ),
             const SizedBox(height: 8),
+            
             // StreamBuilder के जरिए फायरस्टोर से लाइव डेटा दिखाना
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
