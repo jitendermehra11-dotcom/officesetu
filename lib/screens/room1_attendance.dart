@@ -30,8 +30,12 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
   double _confidenceScore = 0.0;
   String _cleanStatus = "तैयार (Ready for Multi-Page & Live Firebase Sync)";
 
-  // यहाँ से डिफ़ॉल्ट EMP-401 हटाकर खाली कर दिया गया है ताकि डायनेमिक डेटा आ सके
+  // डायनेमिक कर्मचारी कोड के लिए कंट्रोलर
   final TextEditingController _empCodeController = TextEditingController();
+
+  // IN और EXIT टाइम स्टोर करने के लिए वेरिएबल्स
+  String _inTime = "-";
+  String _outTime = "-";
 
   late stt.SpeechToText _speech;
   bool _isListening = false;
@@ -42,6 +46,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
     _speech = stt.SpeechToText();
   }
 
+  // माइक कमांड को ठीक और सटीक बनाने के लिए hi_IN सेटअप
   void _listenVoiceInput() async {
     if (!_isListening) {
       bool available = await _speech.initialize(
@@ -51,6 +56,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
       if (available) {
         setState(() => _isListening = true);
         _speech.listen(
+          localeId: 'hi_IN', // भारतीय भाषाओं और वॉइस कमांड्स को आसानी से पकड़ने के लिए
           onResult: (val) => setState(() {
             _empCodeController.text = val.recognizedWords;
           }),
@@ -135,28 +141,26 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
     List<String> roughTimes = roughMatches.map((m) => m[0]!).toList();
     List<String> origTimes = origMatches.map((m) => m[0]!).toList();
 
-    // अगर यूजर ने कोड नहीं डाला, तो ऑटो-डिटेक्ट या डिफॉल्ट 'EMP-LIVE' सेट करें
     if (_empCodeController.text.isEmpty) {
       _empCodeController.text = "EMP-LIVE-01";
     }
 
     if (roughTimes.isNotEmpty || origTimes.isNotEmpty) {
-      String inTime = roughTimes.isNotEmpty ? roughTimes[0] : (origTimes.isNotEmpty ? origTimes[0] : "09:00");
-      String outTime = roughTimes.length > 1 ? roughTimes[1] : (origTimes.length > 1 ? origTimes[1] : "18:00");
+      _inTime = roughTimes.isNotEmpty ? roughTimes[0] : (origTimes.isNotEmpty ? origTimes[0] : "09:00");
+      _outTime = roughTimes.length > 1 ? roughTimes[1] : (origTimes.length > 1 ? origTimes[1] : "18:00");
       
       setState(() {
-        _reconciledResult = "कर्मचारी कोड: ${_empCodeController.text}\nकुल रफ पेज: ${_roughImages.length} | कुल ओरिजिनल पेज: ${_originalImages.length}\nIN Time (मिलान): $inTime\nEXIT Time (मिलान): $outTime\nकुल कार्य समय: 8 घंटे 30 मिनट\nसत्यापन स्थिति: लाइव डेटा मिलान सफल!";
+        _reconciledResult = "कर्मचारी कोड: ${_empCodeController.text}\nकुल रफ पेज: ${_roughImages.length} | कुल ओरिजिनल पेज: ${_originalImages.length}\nIN Time (मिलान): $_inTime\nEXIT Time (मिलान): $_outTime\nकुल कार्य समय: 8 घंटे 30 मिनट\nसत्यापन स्थिति: लाइव डेटा मिलान सफल!";
         _confidenceScore = 99.5;
       });
 
-      // फायरबेस क्लाउड पर लाइव सेविंग विद टाइमआउट सेफ्टी
       try {
         await FirebaseFirestore.instance.collection('attendance_logs').add({
           'employeeCode': _empCodeController.text,
           'roughPagesCount': _roughImages.length,
           'originalPagesCount': _originalImages.length,
-          'inTime': inTime,
-          'outTime': outTime,
+          'inTime': _inTime,
+          'outTime': _outTime,
           'confidenceScore': _confidenceScore,
           'timestamp': FieldValue.serverTimestamp(),
           'status': 'Live Cloud Synced'
@@ -186,10 +190,11 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
         build: (pw.Context context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text("OfficeSetu - Live Attendance Report", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+            pw.Text("OfficeSetu - Detailed Live Attendance Report", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 10),
             pw.Text("Employee Code: ${_empCodeController.text}"),
             pw.Text("Rough Pages: ${_roughImages.length} | Original Pages: ${_originalImages.length}"),
+            pw.Text("IN Time: $_inTime | EXIT Time: $_outTime"),
             pw.Divider(),
             pw.SizedBox(height: 10),
             pw.Text("Confidence Score: $_confidenceScore%"),
@@ -207,7 +212,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
 
   Future<void> _exportToExcel() async {
     var excel = excel_lib.Excel.createExcel();
-    String sheetName = 'Live_Attendance';
+    String sheetName = 'Detailed_Attendance';
     excel.rename(excel.getDefaultSheet()!, sheetName);
 
     excel_lib.Sheet sheetObject = excel[sheetName];
@@ -216,6 +221,8 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
       excel_lib.TextCellValue('Employee Code'),
       excel_lib.TextCellValue('Rough Pages'),
       excel_lib.TextCellValue('Original Pages'),
+      excel_lib.TextCellValue('IN Time'),
+      excel_lib.TextCellValue('EXIT Time'),
       excel_lib.TextCellValue('Accuracy Score'),
       excel_lib.TextCellValue('Status')
     ]);
@@ -224,13 +231,15 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
       excel_lib.TextCellValue(_empCodeController.text),
       excel_lib.TextCellValue(_roughImages.length.toString()),
       excel_lib.TextCellValue(_originalImages.length.toString()),
+      excel_lib.TextCellValue(_inTime),
+      excel_lib.TextCellValue(_outTime),
       excel_lib.TextCellValue('$_confidenceScore%'),
       excel_lib.TextCellValue('Live Cloud Synced Successful')
     ]);
 
     var fileBytes = excel.save();
     if (fileBytes != null) {
-      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_live_attendance.xlsx');
+      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_detailed_attendance.xlsx');
     }
   }
 
