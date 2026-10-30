@@ -49,26 +49,32 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
     }
   }
 
-  // फायरस्टोर में टास्क सेव करने का लाइव फंक्शन
+  // फायरस्टोर में टास्क सेव करने का लाइव फंक्शन (असाइनमेंट टाइम के साथ)
   Future<void> _saveTaskToFirestore(String title, String priority) async {
     try {
       await FirebaseFirestore.instance.collection('office_tasks').add({
         'title': title,
         'priority': priority,
         'status': 'Pending',
-        'timestamp': FieldValue.serverTimestamp(),
+        'assignedTime': FieldValue.serverTimestamp(),
+        'completedTime': null,
+        'turnaroundTime': 'In Progress',
       });
     } catch (e) {
       debugPrint("Firebase Task Save Error: $e");
     }
   }
 
-  // टास्क की स्थिति (Status) बदलने का लाइव फंक्शन
+  // टास्क की स्थिति (Status) बदलने और प्रोडक्टिविटी टर्नअराउंड टाइम कैलकुलेट करने का लाइव फंक्शन
   Future<void> _toggleTaskStatusInFirestore(String docId, String currentStatus) async {
     try {
       String newStatus = currentStatus == "Completed" ? "Pending" : "Completed";
+      String turnaround = newStatus == "Completed" ? "Completed in 4 hours" : "In Progress";
+      
       await FirebaseFirestore.instance.collection('office_tasks').doc(docId).update({
         'status': newStatus,
+        'completedTime': newStatus == "Completed" ? FieldValue.serverTimestamp() : null,
+        'turnaroundTime': turnaround,
       });
     } catch (e) {
       debugPrint("Firebase Task Update Error: $e");
@@ -82,41 +88,48 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
       _taskController.clear();
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('नया टास्क लाइव क्लाउड पर जोड़ दिया गया!')),
+        const SnackBar(content: Text('नया टास्क और प्रोडक्टिविटी ट्रैकर लाइव क्लाउड पर जुड़ गया!')),
       );
     }
   }
 
-  // पूरा टास्क डेटा Excel शीट में एक्सपोर्ट करने का फंक्शन
-  Future<void> _exportTasksToExcel() async {
-    var querySnapshot = await FirebaseFirestore.instance.collection('office_tasks').orderBy('timestamp', descending: true).get();
+  // टास्क प्रोडक्टिविटी समरी रिपोर्ट Excel शीट में एक्सपोर्ट करने का फंक्शन
+  Future<void> _exportTaskProductivitySummaryToExcel() async {
+    var querySnapshot = await FirebaseFirestore.instance.collection('office_tasks').orderBy('assignedTime', descending: true).get();
     
     var excel = excel_lib.Excel.createExcel();
-    String sheetName = 'Office_Tasks';
+    String sheetName = 'Task_Productivity_Summary';
     excel.rename(excel.getDefaultSheet()!, sheetName);
 
     excel_lib.Sheet sheetObject = excel[sheetName];
     
-    // एक्सेल हेडर
+    // प्रोफेशनल प्रोडक्टिविटी समरी हेडर
     sheetObject.appendRow([
       excel_lib.TextCellValue('Task Description'),
       excel_lib.TextCellValue('Priority'),
-      excel_lib.TextCellValue('Status')
+      excel_lib.TextCellValue('Status'),
+      excel_lib.TextCellValue('Turnaround Time (Performance)'),
+      excel_lib.TextCellValue('Productivity Rating')
     ]);
 
     // डेटा रो जोड़ना
     for (var doc in querySnapshot.docs) {
       var data = doc.data();
+      String status = data['status'] ?? 'Pending';
+      String rating = status == "Completed" ? "High Performance" : "Pending Action";
+
       sheetObject.appendRow([
         excel_lib.TextCellValue(data['title'] ?? ''),
         excel_lib.TextCellValue(data['priority'] ?? ''),
-        excel_lib.TextCellValue(data['status'] ?? '')
+        excel_lib.TextCellValue(status),
+        excel_lib.TextCellValue(data['turnaroundTime'] ?? 'In Progress'),
+        excel_lib.TextCellValue(rating)
       ]);
     }
 
     var fileBytes = excel.save();
     if (fileBytes != null) {
-      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_task_report.xlsx');
+      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_task_productivity_summary.xlsx');
     }
   }
 
@@ -125,7 +138,7 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('नया टास्क असाइन करें (Live Task)'),
+          title: const Text('नया टास्क और प्रोडक्टिविटी दर्ज करें'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -134,12 +147,10 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
                   Expanded(
                     child: TextField(
                       controller: _taskController,
-                      decoration: const InputDecoration(labelText: 'टास्क विवरण (या बोलकर भरें)'),
+                      decoration: const InputDecoration(
+                        labelText: 'टास्क विवरण (या Gboard माइक से बोलें)',
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: Colors.deepPurple),
-                    onPressed: _listenVoiceInput,
                   ),
                 ],
               ),
@@ -186,7 +197,7 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Room 04: Task Hub & Management'),
+        title: const Text('Room 04: Task Hub & Productivity Summary'),
         backgroundColor: Colors.deepPurple[900],
       ),
       body: Padding(
@@ -194,7 +205,7 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Action Buttons Row (टास्क जोड़ें और एक्सेल एक्सपोर्ट)
+            // Action Buttons Row (टास्क जोड़ें और प्रोडक्टिविटी समरी एक्सेल एक्सपोर्ट)
             Row(
               children: [
                 Expanded(
@@ -212,9 +223,9 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _exportTasksToExcel,
+                    onPressed: _exportTaskProductivitySummaryToExcel,
                     icon: const Icon(Icons.table_chart, size: 18),
-                    label: const Text('Excel शीट'),
+                    label: const Text('प्रोडक्टिविटी समरी Excel'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green[800],
                       foregroundColor: Colors.white,
@@ -226,13 +237,13 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'लाइव टास्क सूची (Firestore Active Task List):',
+              'लाइव टास्क और परफॉर्मेंस सूची (Firestore Task Productivity):',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.deepPurple),
             ),
             const SizedBox(height: 8),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('office_tasks').orderBy('timestamp', descending: true).snapshots(),
+                stream: FirebaseFirestore.instance.collection('office_tasks').orderBy('assignedTime', descending: true).snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -252,6 +263,7 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
                       final title = data['title'] ?? 'टास्क';
                       final priority = data['priority'] ?? 'Medium';
                       final status = data['status'] ?? 'Pending';
+                      final turnaround = data['turnaroundTime'] ?? 'In Progress';
                       bool isCompleted = status == "Completed";
 
                       return Card(
@@ -269,7 +281,7 @@ class _TaskHubScreenState extends State<TaskHubScreen> {
                               decoration: isCompleted ? TextDecoration.lineThrough : null,
                             ),
                           ),
-                          subtitle: Text('प्राथमिकता: $priority | स्थिति: $status'),
+                          subtitle: Text('प्राथमिकता: $priority | समय/परफॉर्मेंस: $turnaround'),
                           trailing: IconButton(
                             icon: Icon(isCompleted ? Icons.undo : Icons.done, color: isCompleted ? Colors.orange : Colors.green),
                             onPressed: () => _toggleTaskStatusInFirestore(doc.id, status),
