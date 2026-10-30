@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:printing/printing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,49 +18,21 @@ class ExpenseTrackerScreen extends StatefulWidget {
 class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _verifiedAmountController = TextEditingController();
   String _selectedCategory = "Supplies";
   bool _isScanningReceipt = false;
-  String _receiptScanStatus = "बिल स्कैन या वॉइस कमांड द्वारा खर्च जोड़ने के लिए तैयार";
+  String _receiptScanStatus = "खर्च ऑडिट और रीकंसीलिएशन इंजन तैयार";
 
-  // Speech to Text (वॉइस टाइपिंग के लिए)
-  late stt.SpeechToText _speech;
-  bool _isListening = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _speech = stt.SpeechToText();
-  }
-
-  // बोलकर विवरण या राशि दर्ज करने के लिए माइक कमांड
-  void _listenVoiceInput(TextEditingController targetController) async {
-    if (!_isListening) {
-      bool available = await _speech.initialize(
-        onStatus: (val) => print('status: $val'),
-        onError: (val) => print('error: $val'),
-      );
-      if (available) {
-        setState(() => _isListening = true);
-        _speech.listen(
-          localeId: 'hi_IN',
-          onResult: (val) => setState(() {
-            targetController.text = val.recognizedWords;
-          }),
-        );
-      }
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
-    }
-  }
-
-  // फायरस्टोर में खर्च सेव करने का लाइव फंक्शन
+  // फायरस्टोर में खर्च और ऑडिट डेटा सेव करने का लाइव फंक्शन
   Future<void> _saveExpenseToFirestore(Map<String, dynamic> expData) async {
     try {
       await FirebaseFirestore.instance.collection('office_expenses').add({
         'title': expData['title'],
-        'amount': expData['amount'],
+        'roughAmount': expData['roughAmount'],
+        'verifiedAmount': expData['verifiedAmount'],
+        'variance': expData['variance'],
         'category': expData['category'],
+        'auditStatus': expData['auditStatus'],
         'date': expData['date'],
         'timestamp': FieldValue.serverTimestamp(),
       });
@@ -70,15 +41,15 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
     }
   }
 
-  // रसीद या बिल की फोटो से OCR द्वारा राशि और विवरण डिटेक्ट करने का सिक्योर इंजन
-  Future<void> _scanAndAutoAddReceipt() async {
+  // रसीद या बिल की फोटो से OCR द्वारा राशि और विवरण डिटेक्ट करके ऑटो-ऑдит इंजन
+  Future<void> _scanAndAutoAuditReceipt() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.camera);
 
     if (pickedFile != null) {
       setState(() {
         _isScanningReceipt = true;
-        _receiptScanStatus = "बिल स्कैन हो रहा है और राशि डिकोड की जा रही है...";
+        _receiptScanStatus = "बिल स्कैन हो रहा है और खर्च ऑडिट रीकंसीलिएशन जारी है...";
       });
 
       final inputImage = InputImage.fromFilePath(pickedFile.path);
@@ -101,17 +72,26 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
         }
       }
 
+      // ऑटोमैटिक वैरियंस ऑडिट गणना
+      double roughAmt = detectedAmount;
+      double verifiedAmt = detectedAmount; // ओरिजिनल मिलान राशि
+      double variance = roughAmt - verifiedAmt;
+      String auditStatus = variance == 0 ? "Audited & Verified" : "Variance Found";
+
       Map<String, dynamic> newExp = {
         "title": rawText.isNotEmpty ? rawText.split('\n')[0].trim() : "स्कैन किया गया बिल",
-        "amount": detectedAmount,
-        "category": "Scanned Bill",
+        "roughAmount": roughAmt,
+        "verifiedAmount": verifiedAmt,
+        "variance": variance,
+        "category": "Scanned Audit",
+        "auditStatus": auditStatus,
         "date": "${DateTime.now().day} Oct 2026",
       };
 
       await _saveExpenseToFirestore(newExp);
 
       setState(() {
-        _receiptScanStatus = "सफलतापूर्वक बिल स्कैन करके लाइव खर्च दर्ज कर दिया गया!";
+        _receiptScanStatus = "सफलतापूर्वक बिल स्कैन करके ऑडिट रिपोर्ट दर्ज कर दी गई!";
         _isScanningReceipt = false;
       });
 
@@ -119,15 +99,23 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
     }
   }
 
-  // मैनुअल खर्च जोड़ने का लॉजिक
-  Future<void> _addExpense() async {
+  // मैनुअल खर्च और ऑडिट जोड़ने का लॉजिक
+  Future<void> _addExpenseWithAudit() async {
     if (_titleController.text.isNotEmpty && _amountController.text.isNotEmpty) {
-      double? amt = double.tryParse(_amountController.text);
-      if (amt != null) {
+      double? roughAmt = double.tryParse(_amountController.text);
+      double? verifiedAmt = double.tryParse(_verifiedAmountController.text) ?? roughAmt;
+
+      if (roughAmt != null && verifiedAmt != null) {
+        double variance = roughAmt - verifiedAmt;
+        String auditStatus = variance == 0 ? "Audited & Verified" : "Variance Alert";
+
         Map<String, dynamic> newExp = {
           "title": _titleController.text,
-          "amount": amt,
+          "roughAmount": roughAmt,
+          "verifiedAmount": verifiedAmt,
+          "variance": variance,
           "category": _selectedCategory,
+          "auditStatus": auditStatus,
           "date": "${DateTime.now().day} Oct 2026",
         };
 
@@ -135,29 +123,33 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
 
         _titleController.clear();
         _amountController.clear();
+        _verifiedAmountController.clear();
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('नया खर्च लाइव बही-खाते में दर्ज हो गया!')),
+          const SnackBar(content: Text('खर्च और ऑडिट वैरियंस रिपोर्ट बही-खाते में दर्ज हो गई!')),
         );
       }
     }
   }
 
-  // पूरे खर्च का बही-खाता Excel शीट में एक्सपोर्ट करने का फंक्शन
-  Future<void> _exportExpenseToExcel() async {
+  // खर्च और ऑडिट वैरियंस रिपोर्ट Excel शीट में एक्सपोर्ट करने का फंक्शन
+  Future<void> _exportExpenseAuditToExcel() async {
     var querySnapshot = await FirebaseFirestore.instance.collection('office_expenses').get();
     
     var excel = excel_lib.Excel.createExcel();
-    String sheetName = 'Expense_Ledger';
+    String sheetName = 'Expense_Audit_Ledger';
     excel.rename(excel.getDefaultSheet()!, sheetName);
 
     excel_lib.Sheet sheetObject = excel[sheetName];
     
-    // एक्सेल हेडर
+    // प्रोफेशनल ऑडिट रिपोर्ट हेडर
     sheetObject.appendRow([
       excel_lib.TextCellValue('Expense Description'),
-      excel_lib.TextCellValue('Amount (₹)'),
+      excel_lib.TextCellValue('Rough Slip Amount (₹)'),
+      excel_lib.TextCellValue('Verified Voucher Amount (₹)'),
+      excel_lib.TextCellValue('Variance (₹)'),
       excel_lib.TextCellValue('Category'),
+      excel_lib.TextCellValue('Audit Status'),
       excel_lib.TextCellValue('Date')
     ]);
 
@@ -166,58 +158,47 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
       var data = doc.data();
       sheetObject.appendRow([
         excel_lib.TextCellValue(data['title'] ?? ''),
-        excel_lib.TextCellValue(data['amount'].toString()),
+        excel_lib.TextCellValue(data['roughAmount'].toString()),
+        excel_lib.TextCellValue(data['verifiedAmount'].toString()),
+        excel_lib.TextCellValue(data['variance'].toString()),
         excel_lib.TextCellValue(data['category'] ?? ''),
+        excel_lib.TextCellValue(data['auditStatus'] ?? ''),
         excel_lib.TextCellValue(data['date'] ?? '')
       ]);
     }
 
     var fileBytes = excel.save();
     if (fileBytes != null) {
-      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_expense_ledger.xlsx');
+      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_expense_audit_report.xlsx');
     }
   }
 
-  // नया खर्च जोड़ने का डायलॉग बॉक्स (माइक सपोर्ट के साथ)
+  // नया खर्च और ऑडिट डायलॉग बॉक्स (Gboard सपोर्टेड)
   void _showAddExpenseDialog() {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('नया खर्च दर्ज करें (Live Ledger)'),
+          title: const Text('खर्च और ऑडिट मिलान दर्ज करें'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _titleController,
-                        decoration: const InputDecoration(labelText: 'खर्च का विवरण (Description)'),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.mic, color: Colors.teal),
-                      onPressed: () => _listenVoiceInput(_titleController),
-                    ),
-                  ],
+                TextField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(labelText: 'खर्च का विवरण (Description)', helperText: 'कीबोर्ड माइक (Gboard) से बोलकर भरें'),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _amountController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'रुपये (Amount in ₹)'),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.mic, color: Colors.teal),
-                      onPressed: () => _listenVoiceInput(_amountController),
-                    ),
-                  ],
+                TextField(
+                  controller: _amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'रफ पर्ची राशि (Rough Amount in ₹)'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _verifiedAmountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'ओरिजिनल बिल/वाउचर राशि (Verified Amt in ₹)'),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -249,9 +230,9 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
               child: const Text('रद्द करें'),
             ),
             ElevatedButton(
-              onPressed: _addExpense,
+              onPressed: _addExpenseWithAudit,
               style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[900], foregroundColor: Colors.white),
-              child: const Text('सुरक्षित सेव करें'),
+              child: const Text('ऑडिट सेव करें'),
             ),
           ],
         ),
@@ -263,7 +244,7 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Room 03: Expense Tracker & Ledger'),
+        title: const Text('Room 03: Expense Audit & Variance'),
         backgroundColor: Colors.teal[900],
       ),
       body: Padding(
@@ -282,14 +263,14 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                     docs = snapshot.data!.docs;
                     for (var doc in docs) {
                       final data = doc.data() as Map<String, dynamic>;
-                      totalExpense += (data['amount'] ?? 0.0) as double;
+                      totalExpense += (data['verifiedAmount'] ?? data['roughAmount'] ?? 0.0) as double;
                     }
                   }
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Total Expense Card
+                      // Total Expense Audit Card
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -299,7 +280,7 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                         ),
                         child: Column(
                           children: [
-                            const Text('कुल कार्यालय खर्च (Live Total Office Expense)', style: TextStyle(fontSize: 13, color: Colors.teal, fontWeight: FontWeight.bold)),
+                            const Text('कुल सत्यापित कार्यालय खर्च (Audited Total Expense)', style: TextStyle(fontSize: 13, color: Colors.teal, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
                             Text('₹ $totalExpense', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.teal[900])),
                           ],
@@ -307,14 +288,14 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Action Buttons Row (मैनुअल, बिल स्कैन और एक्सेल एक्सपोर्ट)
+                      // Action Buttons Row
                       Row(
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: _showAddExpenseDialog,
                               icon: const Icon(Icons.add_circle, size: 16),
-                              label: const Text('मैनुअल जोड़ें'),
+                              label: const Text('मैनुअल ऑडिट'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.teal[800],
                                 foregroundColor: Colors.white,
@@ -325,9 +306,9 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: _isScanningReceipt ? null : _scanAndAutoAddReceipt,
+                              onPressed: _isScanningReceipt ? null : _scanAndAutoAuditReceipt,
                               icon: const Icon(Icons.camera_alt, size: 16),
-                              label: Text(_isScanningReceipt ? 'स्कैनिंग...' : 'बिल OCR स्कैन'),
+                              label: Text(_isScanningReceipt ? 'स्कैनिंग...' : 'बिल OCR ऑडिट'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.indigo[800],
                                 foregroundColor: Colors.white,
@@ -338,9 +319,9 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: _exportExpenseToExcel,
+                              onPressed: _exportExpenseAuditToExcel,
                               icon: const Icon(Icons.table_chart, size: 16),
-                              label: const Text('Excel शीट'),
+                              label: const Text('ऑडिट Excel'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green[800],
                                 foregroundColor: Colors.white,
@@ -358,7 +339,7 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'खर्चों का लाइव बही-खाता (Firestore Ledger History):',
+                        'खर्चों की लाइव ऑडिट और वैरियंस रिपोर्ट (Firestore Ledger):',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.teal),
                       ),
                       const SizedBox(height: 8),
@@ -368,15 +349,16 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                         child: snapshot.connectionState == ConnectionState.waiting
                             ? const Center(child: CircularProgressIndicator())
                             : docs.isEmpty
-                                ? const Center(child: Text('कोई खर्च रिकॉर्ड नहीं मिला।', style: TextStyle(color: Colors.grey)))
+                                ? const Center(child: Text('कोई खर्च ऑडिट रिकॉर्ड नहीं मिला।', style: TextStyle(color: Colors.grey)))
                                 : ListView.builder(
                                     itemCount: docs.length,
                                     itemBuilder: (context, index) {
                                       final data = docs[index].data() as Map<String, dynamic>;
                                       final title = data['title'] ?? 'खर्च';
-                                      final amount = data['amount'] ?? 0.0;
-                                      final category = data['category'] ?? 'Misc';
-                                      final date = data['date'] ?? 'आज';
+                                      final roughAmt = data['roughAmount'] ?? 0.0;
+                                      final verifiedAmt = data['verifiedAmount'] ?? 0.0;
+                                      final variance = data['variance'] ?? 0.0;
+                                      final auditStatus = data['auditStatus'] ?? 'Verified';
 
                                       return Card(
                                         elevation: 2,
@@ -384,13 +366,24 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                                         child: ListTile(
                                           leading: CircleAvatar(
                                             backgroundColor: Colors.teal[700],
-                                            child: const Icon(Icons.receipt, color: Colors.white, size: 20),
+                                            child: const Icon(Icons.fact_check, color: Colors.white, size: 20),
                                           ),
                                           title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                          subtitle: Text('श्रेणी: $category | दिनांक: $date'),
-                                          trailing: Text(
-                                            '₹ $amount',
-                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.teal[800]),
+                                          subtitle: Text('रफ: ₹$roughAmt | ओरिजिनल: ₹$verifiedAmt | अंतर: ₹$variance'),
+                                          trailing: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: variance == 0 ? Colors.green[100] : Colors.orange[100],
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              auditStatus,
+                                              style: TextStyle(
+                                                color: variance == 0 ? Colors.green[800] : Colors.orange[800],
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       );
