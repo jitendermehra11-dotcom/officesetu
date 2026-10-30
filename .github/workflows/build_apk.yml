@@ -1,4 +1,4 @@
-name: Build officesetu APK
+Name: Build officesetu APK
 
 on:
   push:
@@ -29,6 +29,9 @@ jobs:
 
       - name: Fix minSdkVersion to 21
         run: python3 -c "p='android/app/build.gradle'; d=open(p).read(); open(p,'w').write(d.replace('minSdkVersion 19','minSdkVersion 21').replace('minSdkVersion 16','minSdkVersion 21').replace('minSdkVersion flutter.minSdkVersion','minSdkVersion 21'))"
+
+      - name: Set Gradle JVM Memory
+        run: echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> android/gradle.properties
 
       - name: Clean Project
         run: flutter clean
