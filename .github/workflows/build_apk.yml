@@ -32,8 +32,11 @@ jobs:
           python3 -c "p='android/app/build.gradle'; d=open(p).read(); d=d.replace('minSdkVersion 19','minSdkVersion 21').replace('minSdkVersion 16','minSdkVersion 21').replace('minSdkVersion flutter.minSdkVersion','minSdkVersion 21'); open(p,'w').write(d)"
           python3 -c "p='android/app/build.gradle'; d=open(p).read(); d=d.replace('defaultConfig {', 'defaultConfig {\n        multiDexEnabled true'); open(p,'w').write(d)"
 
-      - name: Set Gradle JVM Memory
-        run: echo "org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8" >> android/gradle.properties
+      - name: Set Gradle JVM Memory & AndroidX
+        run: |
+          echo "org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8" >> android/gradle.properties
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
 
       - name: Clean Project
         run: flutter clean
