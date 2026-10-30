@@ -25,14 +25,12 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
   String _extractedRoughText = "रफ रजिस्टर के सभी पेज यहाँ स्कैन होंगे...";
   String _extractedOriginalText = "ओरिजिनल रजिस्टर के सभी पेज यहाँ स्कैन होंगे...";
   
-  // रीकंसील्ड डेटा रिकॉर्ड्स की लिस्ट (जो 300+ एंट्रीज को संभालेगी)
   List> _reconciledRecords = [];
   
   bool _isScanning = false;
   double _confidenceScore = 0.0;
-  String _cleanStatus = "तैयार (Ready for Multi-Page Reconciliation & Live Firebase Sync)";
+  String _cleanStatus = "तैयार (Ready for Multi-Page Reconciliation)";
 
-  // डायनेमिक कर्मचारी कोड के लिए कंट्रोलर
   final TextEditingController _empCodeController = TextEditingController();
 
   late stt.SpeechToText _speech;
@@ -44,13 +42,9 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
     _speech = stt.SpeechToText();
   }
 
-  // माइक कमांड को ठीक और सटीक बनाने के लिए hi_IN सेटअप
   void _listenVoiceInput() async {
     if (!_isListening) {
-      bool available = await _speech.initialize(
-        onStatus: (val) => print('status: $val'),
-        onError: (val) => print('error: $val'),
-      );
+      bool available = await _speech.initialize();
       if (available) {
         setState(() => _isListening = true);
         _speech.listen(
@@ -74,7 +68,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
       setState(() {
         _roughImages = pickedFiles.map((f) => File(f.path)).toList();
         _isScanning = true;
-        _cleanStatus = "रफ रजिस्टर के ${_roughImages.length} पेजों की ओसीआर प्रोसेसिंग जारी है...";
+        _cleanStatus = "रफ रजिस्टर के पेजों की ओसीआर प्रोसेसिंग जारी है...";
       });
 
       String combinedText = "";
@@ -90,7 +84,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
 
       setState(() {
         _extractedRoughText = combinedText.isNotEmpty ? combinedText : "रफ रजिस्टर में कोई टेक्स्ट नहीं मिला।";
-        _cleanStatus = "रफ रजिस्टर के सभी पेज स्कैन सफल!";
+        _cleanStatus = "रफ रजिस्टर स्कैन सफल!";
         _isScanning = false;
       });
 
@@ -106,7 +100,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
       setState(() {
         _originalImages = pickedFiles.map((f) => File(f.path)).toList();
         _isScanning = true;
-        _cleanStatus = "ओरिजिनल रजिस्टर के ${_originalImages.length} पेजों की ओसीआर प्रोसेसिंग जारी है...";
+        _cleanStatus = "ओरिजिनल रजिस्टर के पेजों की ओसीआर प्रोसेसिंग जारी है...";
       });
 
       String combinedText = "";
@@ -122,7 +116,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
 
       setState(() {
         _extractedOriginalText = combinedText.isNotEmpty ? combinedText : "ओरिजिनल रजिस्टर में कोई टेक्स्ट नहीं मिला।";
-        _cleanStatus = "ओरिजिनल रजिस्टर के सभी पेज स्कैन सफल!";
+        _cleanStatus = "ओरिजिनल रजिस्टर स्कैन सफल!";
         _isScanning = false;
       });
 
@@ -130,7 +124,6 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
     }
   }
 
-  // असली रजिस्टर फॉर्मेट (S.No., Code, IN, OUT) के आधार पर रीकंसीलिएशन इंजन
   Future<void> _performReconciliation() async {
     List<String> roughLines = _extractedRoughText.split('\n').where((s) => s.trim().isNotEmpty).toList();
     List<String> origLines = _extractedOriginalText.split('\n').where((s) => s.trim().isNotEmpty).toList();
@@ -163,7 +156,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
     if (_confidenceScore < 85.0 && totalRows > 5) _confidenceScore = 95.5;
 
     setState(() {
-      _cleanStatus = "डेटा मिलान और रीकंसीलिएशन सफलतापूर्वक पूर्ण!";
+      _cleanStatus = "डेटा मिलान और रीकंसीलिएशन पूर्ण!";
     });
 
     try {
@@ -175,14 +168,8 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
         'timestamp': FieldValue.serverTimestamp(),
         'status': 'Live Cloud Synced'
       }).timeout(const Duration(seconds: 5));
-
-      setState(() {
-        _cleanStatus = "डेटा सफलतापूर्वक फायरबेस क्लाउड पर सिंक हो गया!";
-      });
     } catch (e) {
-      setState(() {
-        _cleanStatus = "लाइव सिंक नोट: लोकल मिलान सफल, नेटवर्क चेक करें।";
-      });
+      debugPrint("Sync Error: $e");
     }
   }
 
@@ -191,13 +178,12 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
     pdf.addPage(
       pw.MultiPage(
         build: (pw.Context context) => [
-          pw.Text("OfficeSetu - Detailed Live Attendance Reconciliation Report", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+          pw.Text("OfficeSetu - Attendance Reconciliation Report", style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 10),
-          pw.Text("Rough Pages: ${_roughImages.length} | Original Pages: ${_originalImages.length} | Accuracy: $_confidenceScore%"),
+          pw.Text("Accuracy: $_confidenceScore%"),
           pw.Divider(),
-          pw.SizedBox(height: 10),
           pw.Table.fromTextArray(
-            headers: ['Sr No', 'Rough Register Data', 'Original Register', 'IN', 'OUT', 'Status'],
+            headers: ['Sr No', 'Rough Data', 'Original', 'IN', 'OUT', 'Status'],
             data: _reconciledRecords.map((item) => [
               item['srNo'].toString(),
               item['roughData'],
@@ -210,7 +196,6 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
         ],
       ),
     );
-
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
 
@@ -218,10 +203,8 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
     var excel = excel_lib.Excel.createExcel();
     String sheetName = 'Detailed_Attendance';
     excel.rename(excel.getDefaultSheet()!, sheetName);
-
     excel_lib.Sheet sheetObject = excel[sheetName];
     
-    // प्रोफेशनल टेबल हेडर्स
     sheetObject.appendRow([
       excel_lib.TextCellValue('Sr No'),
       excel_lib.TextCellValue('Rough Register Data'),
@@ -229,32 +212,17 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
       excel_lib.TextCellValue('IN Time'),
       excel_lib.TextCellValue('OUT Time'),
       excel_lib.TextCellValue('Status'),
-      excel_lib.TextCellValue('Cloud Sync')
     ]);
 
-    // सभी रीकंसील्ड एंट्रीज को रो-बाय-रो जोड़ना
-    if (_reconciledRecords.isEmpty) {
+    for (var item in _reconciledRecords) {
       sheetObject.appendRow([
-        excel_lib.TextCellValue('1'),
-        excel_lib.TextCellValue('EMP-LIVE-01'),
-        excel_lib.TextCellValue('EMP-LIVE-01'),
-        excel_lib.TextCellValue('09:30'),
-        excel_lib.TextCellValue('18:00'),
-        excel_lib.TextCellValue('Matched'),
-        excel_lib.TextCellValue('Synced')
+        excel_lib.TextCellValue(item['srNo'].toString()),
+        excel_lib.TextCellValue(item['roughData']),
+        excel_lib.TextCellValue(item['originalData']),
+        excel_lib.TextCellValue(item['inTime']),
+        excel_lib.TextCellValue(item['outTime']),
+        excel_lib.TextCellValue(item['status']),
       ]);
-    } else {
-      for (var item in _reconciledRecords) {
-        sheetObject.appendRow([
-          excel_lib.TextCellValue(item['srNo'].toString()),
-          excel_lib.TextCellValue(item['roughData']),
-          excel_lib.TextCellValue(item['originalData']),
-          excel_lib.TextCellValue(item['inTime']),
-          excel_lib.TextCellValue(item['outTime']),
-          excel_lib.TextCellValue(item['status']),
-          excel_lib.TextCellValue('Live Synced')
-        ]);
-      }
     }
 
     var fileBytes = excel.save();
@@ -267,7 +235,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Room 01: Live Attendance & Reconciliation'),
+        title: const Text('Room 01: Attendance & Reconciliation'),
         backgroundColor: Colors.indigo[900],
       ),
       body: Padding(
@@ -281,35 +249,26 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
                   child: TextField(
                     controller: _empCodeController,
                     decoration: const InputDecoration(
-                      labelText: 'कर्मचारी कोड / सर्च (या बोलकर भरें)',
-                      hintText: 'उदा. EMP-001',
+                      labelText: 'कर्मचारी कोड / सर्च',
                       border: OutlineInputBorder(),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                FloatingActionButton(
+                IconButton(
+                  icon: Icon(_isListening ? Icons.mic : Icons.mic_none, color: Colors.indigo[900]),
                   onPressed: _listenVoiceInput,
-                  backgroundColor: _isListening ? Colors.red : Colors.indigo[900],
-                  child: Icon(_isListening ? Icons.mic : Icons.mic_none),
-                  mini: true,
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _isScanning ? null : _scanRoughRegisterMulti,
                     icon: const Icon(Icons.collections),
-                    label: Text(_isScanning ? 'प्रक्रिया...' : 'रफ रजिस्टर (पेज चुनें)'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
+                    label: const Text('रफ रजिस्टर (पेज चुनें)'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo[800], foregroundColor: Colors.white),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -317,74 +276,26 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _isScanning ? null : _scanOriginalRegisterMulti,
                     icon: const Icon(Icons.library_add_check),
-                    label: Text(_isScanning ? 'प्रक्रिया...' : 'ओरिजिनल (पेज चुनें)'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
+                    label: const Text('ओरिजिनल (पेज चुनें)'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[800], foregroundColor: Colors.white),
                   ),
                 ),
               ],
             ),
-            
             const SizedBox(height: 6),
-            Text(
-              'स्थिति: $_cleanStatus',
-              style: TextStyle(fontSize: 11, color: Colors.indigo[700], fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
-            ),
+            Text('स्थिति: $_cleanStatus', style: const TextStyle(fontSize: 11, color: Colors.grey), textAlign: TextAlign.center),
             const SizedBox(height: 8),
-
-            if (_confidenceScore > 0)
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.teal[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.teal),
-                ),
-                child: Text(
-                  'डेटा मिलान एक्यूरेसी स्कोर: $_confidenceScore% (लाइव फायरबेस कनेक्टेड)',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal[900]),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            const SizedBox(height: 8),
-
-            const Text(
-              'रीकंसील्ड अटेंडेंस सूची (कंपाइलड एंट्रीज):',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo),
-            ),
-            const SizedBox(height: 4),
-
-            // लाइव लिस्टव्यू जो सभी रीकंसील्ड एंट्रीज को दिखाएगा
             Expanded(
               child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.indigo.withOpacity(0.3)),
-                ),
+                decoration: BoxDecoration(border: Border.all(color: Colors.indigo.withOpacity(0.3)), borderRadius: BorderRadius.circular(8)),
                 child: _reconciledRecords.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'रफ और ओरिजिनल रजिस्टर के पेज चुनें।\nमिलान के बाद सभी एंट्रीज यहाँ दिखाई देंगी।',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                      )
+                    ? const Center(child: Text('रफ और ओरिजिनल रजिस्टर के पेज चुनें।'))
                     : ListView.builder(
                         itemCount: _reconciledRecords.length,
                         itemBuilder: (context, index) {
                           final item = _reconciledRecords[index];
                           return ListTile(
                             dense: true,
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.indigo[700],
-                              radius: 14,
-                              child: Text('${item['srNo']}', style: const TextStyle(color: Colors.white, fontSize: 10)),
-                            ),
                             title: Text('रफ: ${item['roughData']} | ओरिजिनल: ${item['originalData']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                             subtitle: Text('IN: ${item['inTime']} | OUT: ${item['outTime']}'),
                             trailing: Text(item['status'], style: const TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
@@ -394,7 +305,6 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
               ),
             ),
             const SizedBox(height: 10),
-
             Row(
               children: [
                 Expanded(
@@ -402,11 +312,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
                     onPressed: _generatePDFReport,
                     icon: const Icon(Icons.picture_as_pdf),
                     label: const Text('PDF रिपोर्ट'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal[900],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[900], foregroundColor: Colors.white),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -415,11 +321,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
                     onPressed: _exportToExcel,
                     icon: const Icon(Icons.table_chart),
                     label: const Text('Excel शीट'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green[800], foregroundColor: Colors.white),
                   ),
                 ),
               ],
