@@ -1,4 +1,4 @@
-Name: Build officesetu APK
+name: Build officesetu APK
 
 on:
   push:
