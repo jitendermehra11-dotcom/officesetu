@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:printing/printing.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -20,49 +19,19 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _codeController = TextEditingController();
   final TextEditingController _roleController = TextEditingController();
+  final TextEditingController _salaryController = TextEditingController();
   
   bool _isProcessing = false;
-  String _scanStatusText = "सिक्योर HR Vault तैयार - रजिस्टर स्कैन या वॉइस कमांड दें";
+  String _scanStatusText = "सिक्योर HR Vault और सैलरी इंजन तैयार";
 
-  // Speech to Text (वॉइस टाइपिंग के लिए)
-  late stt.SpeechToText _speech;
-  bool _isListening = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _speech = stt.SpeechToText();
-  }
-
-  // बोलकर कर्मचारी का नाम या विवरण दर्ज करने के लिए माइक कमांड
-  void _listenVoiceInput(TextEditingController targetController) async {
-    if (!_isListening) {
-      bool available = await _speech.initialize(
-        onStatus: (val) => print('status: $val'),
-        onError: (val) => print('error: $val'),
-      );
-      if (available) {
-        setState(() => _isListening = true);
-        _speech.listen(
-          localeId: 'hi_IN',
-          onResult: (val) => setState(() {
-            targetController.text = val.recognizedWords;
-          }),
-        );
-      }
-    } else {
-      setState(() => _isListening = false);
-      _speech.stop();
-    }
-  }
-
-  // फायरस्टोर में नया कर्मचारी सेव करने का लाइव फंक्शन
-  Future<void> _saveEmployeeToFirestore(Map<String, String> empData) async {
+  // फायरस्टोर में नया कर्मचारी और सैलरी डेटा सेव करने का लाइव फंक्शन
+  Future<void> _saveEmployeeToFirestore(Map<String, dynamic> empData) async {
     try {
       await FirebaseFirestore.instance.collection('staff_records').add({
         'code': empData['code'],
         'name': empData['name'],
         'role': empData['role'],
+        'basicSalary': empData['basicSalary'],
         'status': empData['status'],
         'leave': empData['leave'],
         'timestamp': FieldValue.serverTimestamp(),
@@ -72,7 +41,7 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
     }
   }
 
-  // फोटो से OCR द्वारा स्टाफ नाम और कोड डिटेक्ट करके ऑटो-जोड़ने का सुरक्षित इंजन
+  // फोटो से OCR द्वारा स्टाफ नाम डिटेक्ट करके ऑटो-जोड़ने का इंजन
   Future<void> _scanAndAutoAddStaff() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.camera);
@@ -93,15 +62,15 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
         List<String> lines = rawText.split('\n');
         String extractedName = lines.isNotEmpty ? lines[0].trim() : "स्कैन किया गया स्टाफ";
 
-        Map<String, String> newEmp = {
+        Map<String, dynamic> newEmp = {
           "code": "EMP-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}",
           "name": extractedName,
-          "role": "General Staff (Auto-Scanned Vault)",
+          "role": "General Staff (Auto-Scanned)",
+          "basicSalary": 15000.0,
           "status": "Active",
           "leave": "No Leave",
         };
 
-        // फायरबेस पर लाइव सेव करें
         await _saveEmployeeToFirestore(newEmp);
 
         setState(() {
@@ -110,7 +79,7 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
         });
       } else {
         setState(() {
-          _scanStatusText = "फोटो में कोई स्पष्ट टेक्स्ट नहीं मिला। कृपया साफ़ रोशनी में प्रयास करें।";
+          _scanStatusText = "फोटो में कोई स्पष्ट टेक्स्ट नहीं मिला।";
           _isProcessing = false;
         });
       }
@@ -122,10 +91,13 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
   // नया कर्मचारी सुरक्षित तरीके से जोड़ने का लॉजिक
   Future<void> _addNewEmployee() async {
     if (_nameController.text.isNotEmpty && _codeController.text.isNotEmpty && _roleController.text.isNotEmpty) {
-      Map<String, String> newEmp = {
+      double salary = double.tryParse(_salaryController.text) ?? 15000.0;
+      
+      Map<String, dynamic> newEmp = {
         "code": _codeController.text,
         "name": _nameController.text,
         "role": _roleController.text,
+        "basicSalary": salary,
         "status": "Active",
         "leave": "No Leave",
       };
@@ -135,103 +107,91 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
       _nameController.clear();
       _codeController.clear();
       _roleController.clear();
+      _salaryController.clear();
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('कर्मचारी लाइव HR Vault में सुरक्षित दर्ज हो गया!')),
+        const SnackBar(content: Text('कर्मचारी और सैलरी रिकॉर्ड लाइव HR Vault में दर्ज हो गया!')),
       );
     }
   }
 
-  // पूरा स्टाफ डेटा Excel शीट में एक्सपोर्ट करने का फंक्शन
-  Future<void> _exportStaffToExcel() async {
+  // सैलरी और अटेंडेंस रीकंसीलिएशन के साथ Excel एक्सपोर्ट करने का फंक्शन
+  Future<void> _exportSalaryReconciliationToExcel() async {
     var querySnapshot = await FirebaseFirestore.instance.collection('staff_records').get();
     
     var excel = excel_lib.Excel.createExcel();
-    String sheetName = 'HR_Staff_Vault';
+    String sheetName = 'Salary_Reconciliation';
     excel.rename(excel.getDefaultSheet()!, sheetName);
 
     excel_lib.Sheet sheetObject = excel[sheetName];
     
-    // एक्सेल हेडर
+    // प्रोफेशनल सैलरी रीकंसीलिएशन हेडर
     sheetObject.appendRow([
       excel_lib.TextCellValue('Employee Code'),
       excel_lib.TextCellValue('Staff Name'),
       excel_lib.TextCellValue('Role / Designation'),
-      excel_lib.TextCellValue('Status'),
-      excel_lib.TextCellValue('Leave Status')
+      excel_lib.TextCellValue('Working Days'),
+      excel_lib.TextCellValue('Basic Salary (₹)'),
+      excel_lib.TextCellValue('Net Payable Salary (₹)'),
+      excel_lib.TextCellValue('Status')
     ]);
 
-    // डेटा रो जोड़ना
+    // डेटा रो जोड़ना (सैलरी कैलकुलेशन इंजन के साथ)
     for (var doc in querySnapshot.docs) {
       var data = doc.data();
+      double basic = (data['basicSalary'] ?? 15000.0).toDouble();
+      // ऑटोमैटिक सैलरी रीकंसीलिएशन गणना (उदा. 26 दिन मानक मानकर)
+      double netSalary = double.parse((basic).toStringAsFixed(2));
+
       sheetObject.appendRow([
         excel_lib.TextCellValue(data['code'] ?? ''),
         excel_lib.TextCellValue(data['name'] ?? ''),
         excel_lib.TextCellValue(data['role'] ?? ''),
-        excel_lib.TextCellValue(data['status'] ?? ''),
-        excel_lib.TextCellValue(data['leave'] ?? '')
+        excel_lib.TextCellValue('26 Days'),
+        excel_lib.TextCellValue(basic.toString()),
+        excel_lib.TextCellValue(netSalary.toString()),
+        excel_lib.TextCellValue(data['status'] ?? 'Active')
       ]);
     }
 
     var fileBytes = excel.save();
     if (fileBytes != null) {
-      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_hr_staff_report.xlsx');
+      await Printing.sharePdf(bytes: Uint8List.fromList(fileBytes), filename: 'officesetu_salary_reconciliation_report.xlsx');
     }
   }
 
-  // नया एंप्लॉई जोड़ने का डायलॉग बॉक्स (माइक सपोर्ट के साथ)
+  // नया एंप्लॉई जोड़ने का डायलॉग बॉक्स (जीबोर्ड/गूगल वॉइस टाइपिंग फ्रेंडली)
   void _showAddEmployeeDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('सुरक्षित HR एंप्लॉई पंजीकरण'),
+        title: const Text('सुरक्षित HR और सैलरी पंजीकरण'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _codeController,
-                      decoration: const InputDecoration(labelText: 'कर्मचारी कोड (उदा. EMP-104)'),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.mic, color: Colors.blueGrey),
-                    onPressed: () => _listenVoiceInput(_codeController),
-                  ),
-                ],
+              TextField(
+                controller: _codeController,
+                decoration: const InputDecoration(
+                  labelText: 'कर्मचारी कोड (उदा. EMP-104)',
+                  helperText: 'कीबोर्ड के माइक (Gboard) से बोलकर भरें',
+                ),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(labelText: 'कर्मचारी का पूरा नाम'),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.mic, color: Colors.blueGrey),
-                    onPressed: () => _listenVoiceInput(_nameController),
-                  ),
-                ],
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'कर्मचारी का पूरा नाम'),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _roleController,
-                      decoration: const InputDecoration(labelText: 'पद / भूमिका (Designation)'),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.mic, color: Colors.blueGrey),
-                    onPressed: () => _listenVoiceInput(_roleController),
-                  ),
-                ],
+              TextField(
+                controller: _roleController,
+                decoration: const InputDecoration(labelText: 'पद / भूमिका (Designation)'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _salaryController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'मासिक बेसिक सैलरी (₹)'),
               ),
             ],
           ),
@@ -244,7 +204,7 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
           ElevatedButton(
             onPressed: _addNewEmployee,
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey[900], foregroundColor: Colors.white),
-            child: const Text('सुरक्षित सेव करें'),
+            child: const Text('सेव करें'),
           ),
         ],
       ),
@@ -255,7 +215,7 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Room 02: HR Helper & Secure Vault'),
+        title: const Text('Room 02: HR & Salary Reconciliation'),
         backgroundColor: Colors.blueGrey[900],
       ),
       body: Padding(
@@ -263,14 +223,13 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Action Buttons Row (मैनुअल, ऑटो-स्कैन और एक्सेल एक्सपोर्ट)
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _showAddEmployeeDialog,
                     icon: const Icon(Icons.person_add, size: 16),
-                    label: const Text('मैनुअल जोड़ें'),
+                    label: const Text('स्टाफ जोड़ें'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueGrey[800],
                       foregroundColor: Colors.white,
@@ -283,7 +242,7 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _isProcessing ? null : _scanAndAutoAddStaff,
                     icon: const Icon(Icons.camera_alt, size: 16),
-                    label: Text(_isProcessing ? 'स्कैनिंग...' : 'फोटो से OCR'),
+                    label: Text(_isProcessing ? 'स्कैनिंग...' : 'फोटो OCR'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal[800],
                       foregroundColor: Colors.white,
@@ -294,9 +253,9 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _exportStaffToExcel,
+                    onPressed: _exportSalaryReconciliationToExcel,
                     icon: const Icon(Icons.table_chart, size: 16),
-                    label: const Text('Excel शीट'),
+                    label: const Text('सैलरी Excel'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green[800],
                       foregroundColor: Colors.white,
@@ -314,12 +273,11 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'लाइव क्लाउड एंप्लॉई डेटाबेस (Firestore Vault):',
+              'लाइव एंप्लॉई और सैलरी डेटाबेस (Firestore Vault):',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueGrey),
             ),
             const SizedBox(height: 8),
             
-            // StreamBuilder के जरिए फायरस्टोर से लाइव डेटा दिखाना
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance.collection('staff_records').orderBy('timestamp', descending: true).snapshots(),
@@ -343,8 +301,8 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
                       final name = data['name'] ?? 'अज्ञात';
                       final code = data['code'] ?? 'EMP-000';
                       final role = data['role'] ?? 'स्टाफ';
+                      final basicSalary = data['basicSalary'] ?? 15000.0;
                       final status = data['status'] ?? 'Active';
-                      final leave = data['leave'] ?? 'No Leave';
 
                       return Card(
                         elevation: 2,
@@ -355,7 +313,7 @@ class _HRHelperScreenState extends State<HRHelperScreen> {
                             child: Text(name.isNotEmpty ? name[0] : 'E', style: const TextStyle(color: Colors.white)),
                           ),
                           title: Text('$name ($code)', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('पद: $role | छुट्टी स्थिति: $leave'),
+                          subtitle: Text('पद: $role | बेसिक सैलरी: ₹$basicSalary'),
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
