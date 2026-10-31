@@ -25,7 +25,7 @@ class _AttendanceMatchingScreenState extends State<AttendanceMatchingScreen> {
   String _extractedRoughText = "रफ रजिस्टर के सभी पेज यहाँ स्कैन होंगे...";
   String _extractedOriginalText = "ओरिजिनल रजिस्टर के सभी पेज यहाँ स्कैन होंगे...";
   
-  <List> _reconciledRecords = [];
+  List> _reconciledRecords = [];
 
   bool _isScanning = false;
   double _confidenceScore = 0.0;
